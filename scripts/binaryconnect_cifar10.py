@@ -174,7 +174,7 @@ def main():
 
     epochs = 100
     batch_size = 64
-    learning_rate = 0.0005
+    learning_rate = 0.001
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # デバイス判定
     print(f"使用デバイス: {device}")
@@ -182,10 +182,11 @@ def main():
 
     # データセットの準備（正規化も）
     transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) ])
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) 
+    ])
 
     # --- 訓練用とGA検証用に分割 ---
     # 訓練: 45000枚、GA検証用: 5000枚(学習には一切使わない)
