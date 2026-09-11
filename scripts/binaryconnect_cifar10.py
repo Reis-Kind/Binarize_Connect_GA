@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 
 class BinaryConnectCifar10(nn.Module):
     def __init__(self):
@@ -14,22 +14,25 @@ class BinaryConnectCifar10(nn.Module):
         # RGBで3チャネルあるから3（Mnistは白黒だから1）
         self.conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2,  bias=False)
-        self.layers = nn.ModuleList([self.conv1, self.conv2])
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=5, padding=2,  bias=False)
+        self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3])
 
         # 二値化の重み
         self.b_conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
         self.b_conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2,  bias=False)
-        self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2])
+        self.b_conv3 = nn.Conv2d(32, 64, kernel_size=5, padding=2,  bias=False)
+        self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3])
 
         # 神の一手
         self.bn1 = nn.BatchNorm2d(16)
         self.bn2 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(64)
 
         self.pool = nn.MaxPool2d(2)
         self.relu = nn.ReLU()
 
         # padding=2だから32*32→16*16→8*8
-        self.fc = nn.Linear(32 * 8 * 8, 10)
+        self.fc = nn.Linear(64 * 8 * 8, 10)
 
     def binarize(self):
         """
@@ -62,6 +65,9 @@ class BinaryConnectCifar10(nn.Module):
         x = self.b_conv2(x)
         x = self.relu(self.bn2(x))
         x = self.pool(x)
+
+        x = self.b_conv3(x)
+        x = self.relu(self.bn3(x))
 
         x = x.view(x.size(0), -1)
         x = self.fc(x)
@@ -164,8 +170,8 @@ def plot(train_losses, test_accuracies):
 
     plt.tight_layout()
     os.makedirs('./output', exist_ok=True) # フォルダがなければ作成
-    plt.savefig('./output/binaryconnect_cifar_result.png')
-    print("\nグラフを 'binaryconnect_cifar_result.png' として保存した．")
+    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result.png')
+    print("\nグラフを 'binaryconnect_cifar_aug_3conv_result.png' として保存した．")
 
 
 def main():
@@ -187,10 +193,15 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) 
     ])
+        # テスト用：ランダムな切り抜き・反転はしない
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    ])
 
     # --- 訓練用とGA検証用に分割 ---
     # 訓練: 45000枚、GA検証用: 5000枚(学習には一切使わない)
-    full_train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    full_train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
     train_size = 45000
     val_size = len(full_train_dataset) - train_size
     train_dataset, ga_val_dataset = random_split(full_train_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42) )
@@ -206,6 +217,7 @@ def main():
         list(model.layers.parameters()) +
         list(model.bn1.parameters()) +
         list(model.bn2.parameters()) +
+        list(model.bn3.parameters()) +
         list(model.fc.parameters()),
         lr=learning_rate
     )
@@ -244,7 +256,8 @@ def main():
     plot(train_losses, test_accuracies)
 
      # 学習済みパラメータとデータ分割を保存
-    save_path = './output/binaryconnect_cifar_bp.pt'
+   # main()内
+    save_path = './output/binaryconnect_cifar_aug_3conv_bp.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
