@@ -63,11 +63,11 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
     """
     
     """
-    islands = 3
-    model_per_island = 8
+    islands = 5
+    model_per_island = 32
     generations = 100
     migration_interval = 10
-    mutation_rate = 0.001
+    mutation_rate = 0.0001
     ramdom_seed = 42
 
     torch.manual_seed(ramdom_seed)
@@ -142,6 +142,20 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
             island_best_scores.append(scores[best_j])
             island_worst.append(worst_j)
 
+
+        # 今回の1,500枚で、元のBPモデルも評価する
+        bp_acc, bp_loss = evaluate(
+            model, origin_w, x_eval, y_eval, device
+        )
+        bp_score = bp_acc - 0.01 * bp_loss
+
+        print(
+            f"  元BP: {bp_acc * 100:.2f}% | "
+            f"選択候補: {best_acc * 100:.2f}% | "
+            f"正答率差: {(best_acc - bp_acc) * 100:+.2f}ポイント | "
+            f"Score差: {best_score - bp_score:+.5f}"
+        )
+
         changed = (best_w != origin_w).sum().item()
 
         history.append({
@@ -214,7 +228,7 @@ def main():
 
     # BPの学習済みモデルを読み込む
     checkpoint = torch.load(
-        './output/binaryconnect_cifar_aug_3conv_bp.pt',
+        './output/binaryconnect_cifar_aug_3conv_bp_seed42.pt',
         map_location='cpu', weights_only=True
     )
     model = BinaryConnectCifar10().to(device)

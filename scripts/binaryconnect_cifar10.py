@@ -176,7 +176,7 @@ def plot(train_losses, test_accuracies):
 
 def main():
 
-    torch.manual_seed(42)
+    torch.manual_seed(41)
 
     epochs = 200
     batch_size = 64
@@ -257,7 +257,7 @@ def main():
 
      # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_aug_3conv_bp.pt'
+    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed41.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
