@@ -68,7 +68,7 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
     generations = 100
     migration_interval = 10
     mutation_rate = 0.0001
-    ramdom_seed = 42
+    ramdom_seed = 41
 
     torch.manual_seed(ramdom_seed)
     np.random.seed (ramdom_seed)
@@ -220,7 +220,6 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
 
 def main():
 
-    torch.manual_seed(42)
     eval_size = 1500
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -291,7 +290,7 @@ def main():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig('./output/ga_cifar_3conv_resample_100_result.png')
+    plt.savefig('./output/ga_cifar_3conv_resample_100_result_seed41.png')
     plt.close()
 
 
