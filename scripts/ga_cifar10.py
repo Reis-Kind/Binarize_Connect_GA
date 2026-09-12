@@ -68,12 +68,12 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
     generations = 100
     migration_interval = 10
     mutation_rate = 0.0001
-    ramdom_seed = 41
+    random_seed = 44
 
-    torch.manual_seed(ramdom_seed)
-    np.random.seed (ramdom_seed)
+    torch.manual_seed(random_seed)
+    np.random.seed (random_seed)
     # 画像抽出専用の乱数生成器
-    data_generator = torch.Generator().manual_seed(ramdom_seed)
+    data_generator = torch.Generator().manual_seed(random_seed)
 
     # 全対象層の重みを1次元にまとめる
     origin_w = torch.cat([layer.weight.detach().cpu().reshape(-1) for layer in model.layers])
@@ -226,10 +226,8 @@ def main():
     print(f"使用デバイス: {device}")
 
     # BPの学習済みモデルを読み込む
-    checkpoint = torch.load(
-        './output/binaryconnect_cifar_aug_3conv_bp_seed42.pt',
-        map_location='cpu', weights_only=True
-    )
+    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42.pt'
+    checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -290,7 +288,7 @@ def main():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig('./output/ga_cifar_3conv_resample_100_result_seed41.png')
+    plt.savefig('./output/ga_cifar_3conv_resample_100_result_seed40.png')
     plt.close()
 
 

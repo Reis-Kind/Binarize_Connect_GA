@@ -176,11 +176,11 @@ def plot(train_losses, test_accuracies):
 
 def main():
 
-    torch.manual_seed(41)
-
-    epochs = 200
+   random_seed = 42
+    epochs = 500
     batch_size = 64
     learning_rate = 0.001
+    torch.manual_seed(random_seed)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # デバイス判定
     print(f"使用デバイス: {device}")
@@ -194,7 +194,7 @@ def main():
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) 
     ])
         # テスト用：ランダムな切り抜き・反転はしない
-    transform = transforms.Compose([
+    transform1_test = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
@@ -207,7 +207,7 @@ def main():
     train_dataset, ga_val_dataset = random_split(full_train_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42) )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
 
     # テストデータをTensorにまとめる
     test_x = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
