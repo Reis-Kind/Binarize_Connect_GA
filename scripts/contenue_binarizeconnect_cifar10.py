@@ -176,17 +176,17 @@ def plot(train_losses, test_accuracies):
 
 def main():
 
-    random_seed = 42
+    random_seed = 43
     epochs = 50
     batch_size = 64
-    learning_rate = 0.001
+    learning_rate = 0.0001
     torch.manual_seed(random_seed)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # デバイス判定
     print(f"使用デバイス: {device}")
 
     # 事前学習の重みを読み込む
-    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42.pt'
+    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_500ep.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])

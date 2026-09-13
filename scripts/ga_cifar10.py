@@ -68,7 +68,7 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
     generations = 100
     migration_interval = 10
     mutation_rate = 0.0001
-    random_seed = 44
+    random_seed = 43
 
     torch.manual_seed(random_seed)
     np.random.seed (random_seed)
@@ -226,7 +226,7 @@ def main():
     print(f"使用デバイス: {device}")
 
     # BPの学習済みモデルを読み込む
-    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42.pt'
+    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_500ep.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])

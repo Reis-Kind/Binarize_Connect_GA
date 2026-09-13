@@ -176,7 +176,7 @@ def plot(train_losses, test_accuracies):
 
 def main():
 
-   random_seed = 42
+    random_seed = 42
     epochs = 500
     batch_size = 64
     learning_rate = 0.001
