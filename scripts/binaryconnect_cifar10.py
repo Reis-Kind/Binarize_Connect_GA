@@ -170,14 +170,14 @@ def plot(train_losses, test_accuracies):
 
     plt.tight_layout()
     os.makedirs('./output', exist_ok=True) # フォルダがなければ作成
-    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result_1500.png')
+    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result_1500_no_sche.png')
     print("\nグラフを 'binaryconnect_cifar_aug_3conv_result.png' として保存した．")
 
 
 def main():
 
     random_seed = 42
-    epochs = 1500
+    epochs = 1000
     batch_size = 64
     learning_rate = 0.001
     torch.manual_seed(random_seed)
@@ -222,9 +222,6 @@ def main():
         lr=learning_rate
     )
 
-    # 学習率をcos関数の波形に沿って徐々に小さくしていく
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-
     train_losses = []
     test_accuracies = []
 
@@ -245,7 +242,6 @@ def main():
         epoch_loss = running_loss / len(train_loader.dataset)
         epoch_acc = evaluate(model, test_x, test_y, device)
 
-        scheduler.step()
 
         train_losses.append(epoch_loss)
         test_accuracies.append(epoch_acc)
@@ -257,7 +253,7 @@ def main():
 
      # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500ep.pt'
+    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500_no_sche.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),

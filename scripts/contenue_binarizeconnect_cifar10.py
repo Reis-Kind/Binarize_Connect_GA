@@ -186,7 +186,7 @@ def main():
     print(f"使用デバイス: {device}")
 
     # 事前学習の重みを読み込む
-    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_500ep.pt'
+    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500ep.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])

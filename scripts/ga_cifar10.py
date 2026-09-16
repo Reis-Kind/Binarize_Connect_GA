@@ -59,7 +59,7 @@ def tournament_select(scores, k):
     return best_idx
 
 
-def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
+def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size):
     """
     
     """
@@ -97,7 +97,7 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
     # 全個体を評価
     for gen in range(generations + 1):
 
-        # 45,000枚の中での位置を、重複なしで1,500個選ぶ
+        # 45,000枚の中での位置を、重複なしで5000個選ぶ
         order = torch.randperm(
             len(train_indices),
             generator=data_generator
@@ -213,20 +213,51 @@ def genetic_algorithm(model, dataset, train_indices,  device, eval_size=1500):
                     island_w[i, j] = child
 
     # 最良個体を反映し、二値化層も同期
-    evaluate(model, best_w, x_eval, y_eval, device)
+    # GA終了後の個体選択に使う固定5,000枚
+    x_final = torch.stack([dataset[i][0] for i in final_indices])
+    y_final = torch.tensor([dataset[i][1] for i in final_indices])
 
-    return best_w, history
+    # 元BPを最初の候補にする
+    final_best_w = origin_w.clone()
+    final_best_acc, final_best_loss = evaluate(model, final_best_w, x_final, y_final, device)
+
+    # 最終世代の全個体を固定5,000枚で評価する
+    for i in range(islands):
+        for j in range(model_per_island):
+            acc, loss = evaluate(model, island_w[i, j], x_final, y_final, device)
+
+            # 正答率が高い個体を選ぶ
+            # 同率の場合はLossが小さい個体を選ぶ
+            if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
+                final_best_acc = acc
+                final_best_loss = loss
+                final_best_w = island_w[i, j].clone()
+
+    changed = (final_best_w != origin_w).sum().item()
+
+    print("\n固定5,000枚による最終選択")
+    print(
+        f"Accuracy: {final_best_acc * 100:.2f}% | "
+        f"Loss: {final_best_loss:.4f} | "
+        f"符号変化: {changed}個"
+    )
+
+    # 選択した個体をモデルに反映
+    evaluate(model, final_best_w, x_final, y_final, device)
+
+    return final_best_w, history
+    
     
 
 def main():
 
-    eval_size = 1500
+    eval_size = 5000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
 
     # BPの学習済みモデルを読み込む
-    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_500ep.pt'
+    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500ep.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -257,7 +288,7 @@ def main():
     before_acc, _ = evaluate(model, origin_w, x_test, y_test, device)
 
     # GA実行とGA後の評価
-    best_w, history = genetic_algorithm(model, dataset, checkpoint['train_indices'], device, eval_size=eval_size)
+    best_w, history = genetic_algorithm(model, dataset, checkpoint['train_indices'], checkpoint['ga_indices'], device, eval_size)
     after_acc, _ = evaluate(model, best_w, x_test, y_test, device)
 
     print(f"Test Accuracy: {before_acc * 100:.2f}% → {after_acc * 100:.2f}%")
