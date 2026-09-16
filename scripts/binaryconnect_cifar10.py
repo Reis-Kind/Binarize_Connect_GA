@@ -170,14 +170,14 @@ def plot(train_losses, test_accuracies):
 
     plt.tight_layout()
     os.makedirs('./output', exist_ok=True) # フォルダがなければ作成
-    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result.png')
+    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result_1500.png')
     print("\nグラフを 'binaryconnect_cifar_aug_3conv_result.png' として保存した．")
 
 
 def main():
 
     random_seed = 42
-    epochs = 500
+    epochs = 1500
     batch_size = 64
     learning_rate = 0.001
     torch.manual_seed(random_seed)
@@ -194,7 +194,7 @@ def main():
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) 
     ])
         # テスト用：ランダムな切り抜き・反転はしない
-    transform1_test = transforms.Compose([
+    transform_test = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
@@ -257,7 +257,7 @@ def main():
 
      # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed41.pt'
+    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500ep.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
