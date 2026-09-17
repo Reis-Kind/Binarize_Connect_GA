@@ -52,7 +52,7 @@ def make_initial_population(origin_w):
     population = 200
     mutated = 179
     random = 20
-    mutation_rate = 0.00005
+    mutation_rate = 0.001
 
     # 元の個体の読み込みと元個体をめっちゃコピー
     n_weight = origin_w.numel()
@@ -90,8 +90,8 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     population = 200
     generations = 100
     elite_size = 20
-    mutation_rate = 0.00005
-    random_seed = 43
+    mutation_rate = 0.01
+    random_seed = 42
 
     torch.manual_seed(random_seed)
     np.random.seed (random_seed)
