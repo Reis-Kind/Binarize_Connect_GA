@@ -50,7 +50,7 @@ def make_initial_population(origin_w):
 
     """
     population = 200
-    mutated = 180
+    mutated = 179
     random = 20
     mutation_rate = 0.00005
 
@@ -58,13 +58,13 @@ def make_initial_population(origin_w):
     n_weight = origin_w.numel()
     population_w = origin_w.repeat(population, 1)
 
-    # 元個体をもとに突然変異させた個体をmutated個
-    for i in range(mutated):
+    # 元個体をもとに突然変異させた個体をmutated個(元個体も一体残す)
+    for i in range(1, mutated + 1):
         mutation_mask = (torch.rand(n_weight) < mutation_rate)
         population_w[i, mutation_mask] *= -1.0
 
     # random体は、事前BPとは無関係な完全ランダム二値重みとする。
-    population_w[mutated:] = torch.where(torch.rand(random, n_weight) < 0.5, -1.0, 1.0,)
+    population_w[mutated + 1:] = torch.where(torch.rand(random, n_weight) < 0.5, -1.0, 1.0,)
 
     return population_w
 
@@ -90,7 +90,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     population = 200
     generations = 100
     elite_size = 20
-    mutation_rate = 0.0001
+    mutation_rate = 0.00005
     random_seed = 43
 
     torch.manual_seed(random_seed)
@@ -195,12 +195,12 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
         # 残りの180個体を交叉と突然変異で生成
         for i in range(elite_size, population):
-            parent1_idx = tournament_select(scores, 3)
-            parent2_idx = tournament_select(scores, 3)
+            parent1_idx = tournament_select(scores, 10)
+            parent2_idx = tournament_select(scores, 10)
 
             # 同じ個体同士の交叉を避ける
             while parent2_idx == parent1_idx:
-                parent2_idx = tournament_select(scores, 3)
+                parent2_idx = tournament_select(scores, 10)
 
             # 2個体による一様交叉
             cross_mask = torch.rand(n_weight) < 0.5
@@ -240,7 +240,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             
     changed = (final_best_w != origin_w).sum().item()
 
-    print("\n固定5,000枚による最終選択")
+    print("\n固定5000枚による最終選択")
     print(
         f"Accuracy: {final_best_acc * 100:.2f}% | "
         f"Loss: {final_best_loss:.4f} | "
@@ -324,7 +324,7 @@ def main():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig('./output/ga_cifar_3conv_resample_100_result_seed40.png')
+    plt.savefig('./output/ga_cifar_3conv_200_in_random.png')
     plt.close()
 
 
