@@ -44,6 +44,30 @@ def evaluate(model, w, x, y, device):
 
     return acc, loss
 
+def make_initial_population(origin_w):
+    """
+    初期個体を生成する関数
+
+    """
+    population = 200
+    mutated = 180
+    random = 20
+    mutation_rate = 0.00005
+
+    # 元の個体の読み込みと元個体をめっちゃコピー
+    n_weight = origin_w.numel()
+    population_w = origin_w.repeat(population, 1)
+
+    # 元個体をもとに突然変異させた個体をmutated個
+    for i in range(mutated):
+        mutation_mask = (torch.rand(n_weight) < mutation_rate)
+        population_w[i, mutation_mask] *= -1.0
+
+    # random体は、事前BPとは無関係な完全ランダム二値重みとする。
+    population_w[mutated:] = torch.where(torch.rand(random, n_weight) < 0.5, -1.0, 1.0,)
+
+    return population_w
+
 
 def tournament_select(scores, k):
     """
@@ -63,10 +87,9 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     """
     
     """
-    islands = 5
-    model_per_island = 32
+    population = 200
     generations = 100
-    migration_interval = 10
+    elite_size = 20
     mutation_rate = 0.0001
     random_seed = 43
 
@@ -83,12 +106,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     n_weight = origin_w.numel()
 
     # 初期個体を作成
-    island_w = origin_w.repeat(islands, model_per_island, 1)
-    for i in range(islands):
-        # 元のパラメータも残すため，0番目の個体は変えない
-        for j in range(1, model_per_island):
-            mask = torch.rand(n_weight) < mutation_rate
-            island_w[i, j, mask] *= -1.0
+    population_w = make_initial_population(origin_w)
 
     # 最良個体を元のパラメータで初期化
     best_w = origin_w.clone()
@@ -112,57 +130,44 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
         # 前の世代から持ち越した候補を、
         # 今回の画像で評価し直す
-        best_acc, best_loss = evaluate(model, best_w, x_eval, y_eval, device)
-        best_score = best_acc - 0.01 * best_loss
 
-        island_score = []
-        island_best_w = []
-        island_best_scores = []
-        island_worst = []
+        scores = []
+        losses = []
 
-        for i in range(islands):
-            scores = []
+        for i in range(population):
+            acc, loss = evaluate(model, population_w[i], x_eval, y_eval, device)
+            scores.append(acc)
+            losses.append(loss)
 
-            for j in range(model_per_island):
-                acc, loss = evaluate(model, island_w[i, j], x_eval, y_eval, device)
-                score = acc - 0.01 * loss
-                scores.append(score)
+        # 正答率の降順、同率ならLossの昇順に並べる
+        ranked_indices = sorted(
+            range(population),
+            key=lambda i: (scores[i], -losses[i]),
+            reverse=True
+        )
 
-                if score > best_score:
-                    best_score = score
-                    best_acc = acc
-                    best_loss = loss
-                    best_w = island_w[i, j].clone()
-
-            best_j = np.argmax(scores)
-            worst_j = np.argmin(scores)
-
-            island_score.append(scores)
-            island_best_w.append(island_w[i, best_j].clone())
-            island_best_scores.append(scores[best_j])
-            island_worst.append(worst_j)
-
+        # この世代で最も良い個体
+        best_idx = ranked_indices[0]
+        best_w = population_w[best_idx].clone()
+        best_acc = scores[best_idx]
+        best_loss = losses[best_idx]
 
         # 今回の1,500枚で、元のBPモデルも評価する
-        bp_acc, bp_loss = evaluate(
-            model, origin_w, x_eval, y_eval, device
-        )
-        bp_score = bp_acc - 0.01 * bp_loss
+        bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, device)
+
+        # 変更された個体数
+        changed = (best_w != origin_w).sum().item()
 
         print(
             f"  元BP: {bp_acc * 100:.2f}% | "
-            f"選択候補: {best_acc * 100:.2f}% | "
-            f"正答率差: {(best_acc - bp_acc) * 100:+.2f}ポイント | "
-            f"Score差: {best_score - bp_score:+.5f}"
+            f"世代最良: {best_acc * 100:.2f}% | "
+            f"正答率差: {(best_acc - bp_acc) * 100:+.2f}ポイント"
         )
-
-        changed = (best_w != origin_w).sum().item()
 
         history.append({
             'generation': gen,
             'accuracy': best_acc,
             'loss': best_loss,
-            'score': best_score,
             'changed_weights': changed
         })
 
@@ -170,7 +175,6 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             f"世代 [{gen}/{generations}] | "
             f"Accuracy: {best_acc * 100:.2f}% | "
             f"Loss: {best_loss:.4f} | "
-            f"Score: {best_score:.5f} | "
             f"符号変化: {changed}個",
             flush=True
         )
@@ -179,38 +183,38 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         if gen == generations:
             break
 
-        # 移住処理
-        # migration_intervalは1以上に設定
-        if gen > 0 and gen % migration_interval == 0:
-            for now_island in range(islands):
-                next_island = (now_island + 1) % islands
-                target = island_worst[next_island]
-                score = island_best_scores[now_island]
+        # 現在の集団を保存してから次世代を作る
+        parent_population = population_w.clone()
+        next_population = torch.empty_like(population_w)
 
-                if score > island_score[next_island][target]:
-                    island_w[next_island][target] = island_best_w[now_island].clone()
-                    island_score[next_island][target] = score
+        # 上位20個体をそのまま次世代へ保存
+        elite_indices = ranked_indices[:elite_size]
 
-        # エリート保存，交叉，突然変異
-        for i in range(islands):
-            scores = island_score[i]
-            best_j = np.argmax(scores)
-            # 親集団をコピーしてから子を作る(変化した親の子を作らないために)
-            parent_population = island_w[i].clone()
+        for next_i, elite_idx in enumerate(elite_indices):
+            next_population[next_i] = parent_population[elite_idx].clone()
 
-            for j in range(model_per_island):
-                # その島の一番はそのままに
-                if j != best_j:
-                    # 親をランダムにトーナメントして決める
-                    parent_idx = tournament_select(scores, 3)
-                    # 交叉
-                    cross_mask = torch.rand(n_weight) < 0.5
-                    child = torch.where(cross_mask, parent_population[parent_idx], parent_population[j])
+        # 残りの180個体を交叉と突然変異で生成
+        for i in range(elite_size, population):
+            parent1_idx = tournament_select(scores, 3)
+            parent2_idx = tournament_select(scores, 3)
 
-                    # 突然変異の対象をランダムに選ぶ
-                    mutation_mask = (torch.rand(n_weight) < mutation_rate)
-                    child[mutation_mask] *= -1.0
-                    island_w[i, j] = child
+            # 同じ個体同士の交叉を避ける
+            while parent2_idx == parent1_idx:
+                parent2_idx = tournament_select(scores, 3)
+
+            # 2個体による一様交叉
+            cross_mask = torch.rand(n_weight) < 0.5
+            child = torch.where(cross_mask, parent_population[parent1_idx], parent_population[parent2_idx])
+
+            # 二値重みの符号を突然変異させる
+            mutation_mask = torch.rand(n_weight) < mutation_rate
+            child[mutation_mask] *= -1.0
+
+            next_population[i] = child
+
+        # 新しい集団に更新
+        population_w = next_population
+
 
     # 最良個体を反映し、二値化層も同期
     # GA終了後の個体選択に使う固定5,000枚
@@ -222,17 +226,18 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     final_best_acc, final_best_loss = evaluate(model, final_best_w, x_final, y_final, device)
 
     # 最終世代の全個体を固定5,000枚で評価する
-    for i in range(islands):
-        for j in range(model_per_island):
-            acc, loss = evaluate(model, island_w[i, j], x_final, y_final, device)
+    
+        # 最終世代の全200個体を固定5,000枚で評価する
+    for i in range(population):
+        acc, loss = evaluate(model, population_w[i], x_final, y_final, device)
 
-            # 正答率が高い個体を選ぶ
-            # 同率の場合はLossが小さい個体を選ぶ
-            if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
-                final_best_acc = acc
-                final_best_loss = loss
-                final_best_w = island_w[i, j].clone()
-
+        # 正答率が高い個体を選ぶ
+        # 同率の場合はLossが小さい個体を選ぶ
+        if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
+            final_best_acc = acc
+            final_best_loss = loss
+            final_best_w = population_w[i].clone()
+            
     changed = (final_best_w != origin_w).sum().item()
 
     print("\n固定5,000枚による最終選択")
@@ -251,7 +256,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
 def main():
 
-    eval_size = 5000
+    eval_size = 1500
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
