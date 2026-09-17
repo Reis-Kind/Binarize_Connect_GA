@@ -12,16 +12,18 @@ class BinaryConnectCifar10(nn.Module):
 
         # 実数の重み
         # RGBで3チャネルあるから3（Mnistは白黒だから1）
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2,  bias=False)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=5, padding=2,  bias=False)
-        self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3])
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.fc = nn.Linear(64 * 8 * 8, 10)
+        self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
 
         # 二値化の重み
-        self.b_conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
-        self.b_conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2,  bias=False)
-        self.b_conv3 = nn.Conv2d(32, 64, kernel_size=5, padding=2,  bias=False)
-        self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3])
+        self.b_conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
+        self.b_conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
+        self.b_conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.b_fc = nn.Linear(64 * 8 * 8, 10)
+        self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3, self.b_fc])
 
         # 神の一手
         self.bn1 = nn.BatchNorm2d(16)
@@ -31,8 +33,6 @@ class BinaryConnectCifar10(nn.Module):
         self.pool = nn.MaxPool2d(2)
         self.relu = nn.ReLU()
 
-        # padding=2だから32*32→16*16→8*8
-        self.fc = nn.Linear(64 * 8 * 8, 10)
 
     def binarize(self):
         """
@@ -70,7 +70,7 @@ class BinaryConnectCifar10(nn.Module):
         x = self.relu(self.bn3(x))
 
         x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = self.b_fc(x)
 
         return x
 
@@ -170,8 +170,8 @@ def plot(train_losses, test_accuracies):
 
     plt.tight_layout()
     os.makedirs('./output', exist_ok=True) # フォルダがなければ作成
-    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result_1500_no_sche.png')
-    print("\nグラフを 'binaryconnect_cifar_aug_3conv_result.png' として保存した．")
+    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result_1000.png')
+    print("\nグラフを 'binaryconnect_cifar_aug_3conv_result_1000.png' として保存した．")
 
 
 def main():
@@ -217,8 +217,7 @@ def main():
         list(model.layers.parameters()) +
         list(model.bn1.parameters()) +
         list(model.bn2.parameters()) +
-        list(model.bn3.parameters()) +
-        list(model.fc.parameters()),
+        list(model.bn3.parameters()),
         lr=learning_rate
     )
 
@@ -253,7 +252,7 @@ def main():
 
      # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500_no_sche.pt'
+    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1000.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
