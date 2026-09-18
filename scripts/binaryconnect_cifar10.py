@@ -68,6 +68,7 @@ class BinaryConnectCifar10(nn.Module):
 
         x = self.b_conv3(x)
         x = self.relu(self.bn3(x))
+        x = self.pool(x)
 
         x = x.view(x.size(0), -1)
         x = self.b_fc(x)

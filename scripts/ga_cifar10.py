@@ -84,7 +84,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     """
     
     """
-    population = 200
+    population = 300
     random = 20
     origin = 1
     generations = 100
@@ -255,13 +255,13 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
 def main():
 
-    eval_size = 300
+    eval_size = 1000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
 
     # BPの学習済みモデルを読み込む
-    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_100.pt'
+    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1000.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
