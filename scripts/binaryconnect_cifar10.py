@@ -1,4 +1,5 @@
 import os
+import csv
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,14 +16,14 @@ class BinaryConnectCifar10(nn.Module):
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
-        self.fc = nn.Linear(64 * 8 * 8, 10)
+        self.fc = nn.Linear(64 * 4 * 4, 10)
         self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
 
         # 二値化の重み
         self.b_conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
         self.b_conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
         self.b_conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
-        self.b_fc = nn.Linear(64 * 8 * 8, 10)
+        self.b_fc = nn.Linear(64 * 4 * 4, 10)
         self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3, self.b_fc])
 
         # 神の一手
@@ -95,6 +96,7 @@ class BinaryConnectCifar10(nn.Module):
         for layers in self.layers:
             layers.weight.data.clamp_(-1.0, 1.0)
 
+
     def update(self, optimizer, loss):
         """
         一回分の学習更新を一括処理する関数
@@ -113,72 +115,133 @@ class BinaryConnectCifar10(nn.Module):
         self.clipping()
 
 
-def evaluate(model, x, y, device):
-    """
-    正答率の計算
-    
-    """
-    model.eval()
-
-    x = x.to(device)
-    y = y.to(device)
-
+def test_evaluate(model, x, y, device):
+    """テストデータに対するlossとaccuracyの計算"""
+    x, y = x.to(device), y.to(device)
     with torch.no_grad():
         output = model(x)
-        pred = output.argmax(dim=1)
+        loss = nn.functional.cross_entropy(output, y).item()
+        acc = (output.argmax(dim=1) == y).float().mean().item() * 100.0
 
-        correct = (pred == y).sum().item()
-        total = y.size(0)
-
-    accuracy = 100.0 * correct / total
-
-    return accuracy
+    return acc, loss
 
 
-def cross_entropy_loss(model, x, y):
-    output = model(x)
-    loss =  nn.functional.cross_entropy(output, y)
-
-    return loss
-
-
-def plot(train_losses, test_accuracies):
+def train_evaluate(model, x, y):
     """
-    グラフ描画
+    """
+    output = model(x)
+    loss = nn.functional.cross_entropy(output, y)
+    with torch.no_grad():
+        acc = (output.argmax(dim=1) == y).float().mean().item() * 100.0
 
+    return acc, loss
+
+
+def plot(train_losses, train_accuracies, test_losses, test_accuracies):
+    """
+    Train/TestのLossとAccuracyをグラフ化する。
     """
     epochs = range(1, len(train_losses) + 1)
 
     plt.figure(figsize=(12, 5))
 
-    # Lossのグラフ
+    # Loss
     plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'o-', color='tab:red', label='Train Loss')
-    plt.title('Training Loss')
+    plt.plot(
+        epochs,
+        train_losses,
+        color='tab:red',
+        label='Train Loss'
+    )
+    plt.plot(
+        epochs,
+        test_losses,
+        color='tab:orange',
+        label='Test Loss'
+    )
+    plt.title('Training and Test Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.grid(True)
     plt.legend()
 
-    # Accuracyのグラフ
+    # Accuracy
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, test_accuracies, 'o-', color='tab:blue', label='Test Accuracy')
-    plt.title('Test Accuracy')
+    plt.plot(
+        epochs,
+        train_accuracies,
+        color='tab:green',
+        label='Train Accuracy'
+    )
+    plt.plot(
+        epochs,
+        test_accuracies,
+        color='tab:blue',
+        label='Test Accuracy'
+    )
+    plt.title('Training and Test Accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
     plt.grid(True)
     plt.legend()
 
     plt.tight_layout()
-    os.makedirs('./output', exist_ok=True) # フォルダがなければ作成
-    plt.savefig('./output/binaryconnect_cifar_aug_3conv_result_1000.png')
-    print("\nグラフを 'binaryconnect_cifar_aug_3conv_result_1000.png' として保存した．")
+
+    os.makedirs('./output', exist_ok=True)
+
+    graph_path = ('./output/binaryconnect_cifar_3conv_result_500.png')
+    plt.savefig(graph_path, dpi=300)
+    plt.close()
+
+    print(f"\nグラフを '{graph_path}' に保存しました。")
+
+
+def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
+    """
+    エポックごとの評価結果をCSVに保存する。
+    """
+    os.makedirs('./output', exist_ok=True)
+
+    csv_path = (
+        './output/'
+        'binaryconnect_cifar_3conv_result_500.csv'
+    )
+
+    with open(csv_path, 'w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+
+        writer.writerow([
+            'epoch',
+            'train_loss',
+            'train_accuracy',
+            'test_loss',
+            'test_accuracy'
+        ])
+
+        for epoch, values in enumerate(
+            zip(
+                train_losses,
+                train_accuracies,
+                test_losses,
+                test_accuracies
+            ),
+            start=1
+        ):
+            train_loss, train_acc, test_loss, test_acc = values
+
+            writer.writerow([
+                epoch,
+                train_loss,
+                train_acc,
+                test_loss,
+                test_acc
+            ])
 
 
 def main():
 
     random_seed = 42
-    epochs = 1000
+    epochs = 500
     batch_size = 64
     learning_rate = 0.001
     torch.manual_seed(random_seed)
@@ -200,19 +263,14 @@ def main():
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
     ])
 
-    # --- 訓練用とGA検証用に分割 ---
-    # 訓練: 45000枚、GA検証用: 5000枚(学習には一切使わない)
-    full_train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-    train_size = 45000
-    val_size = len(full_train_dataset) - train_size
-    train_dataset, ga_val_dataset = random_split(full_train_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42) )
 
+    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
 
     # テストデータをTensorにまとめる
-    test_x = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
-    test_y = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
+    test_x = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))]).to(device)
+    test_y = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))]).to(device)
 
     optimizer = optim.Adam(
         list(model.layers.parameters()) +
@@ -223,48 +281,58 @@ def main():
     )
 
     train_losses = []
+    train_accuracies = []
+    test_losses = []
     test_accuracies = []
 
     print("学習開始")
 
     for epoch in range(1, epochs + 1):
-        # モデルを学習モードに
-        model.train()
         running_loss = 0.0
+        running_acc = 0.0
 
         for data, target in train_loader:
             data, target = data.to(device), target.to(device) # データを GPU へ転送
-            loss = cross_entropy_loss(model, data, target)
+            # モデルを学習モードに
+            model.train()
+            acc, loss = train_evaluate(model, data, target)
             model.update(optimizer, loss)
-            # そのエポック全体のloss
             running_loss += loss.item() * data.size(0)
-        # 平均loss
-        epoch_loss = running_loss / len(train_loader.dataset)
-        epoch_acc = evaluate(model, test_x, test_y, device)
+            running_acc += acc * data.size(0)
 
+        # 学習データの評価
+        train_loss = running_loss / len(train_loader.dataset)
+        train_acc = running_acc / len(train_loader.dataset)
 
-        train_losses.append(epoch_loss)
-        test_accuracies.append(epoch_acc)
+        # テストデータの評価
+        model.eval()
+        test_acc, test_loss = test_evaluate(model, test_x, test_y, device)
+       
 
-        print(f"Epoch [{epoch}/{epochs}] - Loss: {epoch_loss:.4f} | Test Acc: {epoch_acc:.2f}%")
+        train_losses.append(train_loss)
+        train_accuracies.append(train_acc)
+        test_accuracies.append(test_acc)
+        test_losses.append(test_loss)
 
-    # グラフ描画実行
-    plot(train_losses, test_accuracies)
+        print(f"Epoch [{epoch}/{epochs}] - Train Loss: {train_loss:.4f} | Train Acc: {test_acc:.2f} | Test Loss: {test_acc:.4f} | Test Acc: {test_acc:.2f}%")
 
-     # 学習済みパラメータとデータ分割を保存
+    plot(train_losses, train_accuracies, test_losses, test_accuracies)
+    save_csv(train_losses, train_accuracies, test_losses, test_accuracies)
+
+   # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1000.pt'
+    save_path = './output/binaryconnect_cifar_3conv_seed42_500.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
-        'train_indices': list(train_dataset.indices),
-        'ga_indices': list(ga_val_dataset.indices),
         'epochs': epochs,
         'seed': 42,
         'batch_size': batch_size,
         'learning_rate': learning_rate,
         'train_losses': train_losses,
-        'test_accuracies': test_accuracies
+        'test_accuracies': test_accuracies,
+        'train_accuracies': train_accuracies,
+        'test_losses': test_losses,
     }, save_path)
 
     print(f"学習済みパラメータを '{save_path}' に保存しました。")

@@ -5,7 +5,51 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
-from binaryconnect_cifar10 import BinaryConnectCifar10
+
+class GACifar10(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        # RGBで3チャネルあるから3（Mnistは白黒だから1）
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.fc = nn.Linear(64 * 4 * 4, 10, bias=False)
+        self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
+
+        # 神の一手
+        self.bn1 = nn.BatchNorm2d(16, track_running_stats=False)
+        self.bn2 = nn.BatchNorm2d(32, track_running_stats=False)
+        self.bn3 = nn.BatchNorm2d(64, track_running_stats=False)
+
+        self.pool = nn.MaxPool2d(2)
+        self.relu = nn.ReLU()
+
+        self.requires_grad_(False)
+
+
+    def forward(self, x):
+
+        """
+        """
+
+        x = self.conv1(x)
+        x = self.relu(self.bn1(x))
+        x = self.pool(x)
+
+        x = self.conv2(x)
+        x = self.relu(self.bn2(x))
+        x = self.pool(x)
+
+        x = self.conv3(x)
+        x = self.relu(self.bn3(x))
+        x = self.pool(x)
+
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+
 
 def evaluate(model, w, x, y, device):
     """
@@ -22,47 +66,30 @@ def evaluate(model, w, x, y, device):
             # 現在の層に重みが何個あるか
             size = layer.weight.numel()
             # 現在の層の重みだけを切り出す
-            layer.weight.copy_(w[offset:offset + size].view_as(layer.weight).to(device))
+            layer.weight.copy_(w[offset:offset + size].view_as(layer.weight))
             offset += size
 
         if offset != w.numel():
             raise ValueError("モデルと遺伝子の重み数が一致しません。")
-        # 正解した画像数
-        correct = 0
-        total_loss = 0.0
-        # 1500枚を一気に処理ぜず
-        batch_size = 128
-        # バッチサイズづつ処理する
-        for start in range(0, len(y), batch_size):
-            batch_x = x[start:start + batch_size]
-            batch_y = y[start:start + batch_size]
-            outputs = model(batch_x)
-            total_loss += nn.functional.cross_entropy(outputs, batch_y, reduction='sum').item()
-            correct += (outputs.argmax(dim=1) == batch_y).sum().item()
 
-    acc = correct / len(y)
-    loss = total_loss / len(y)
+        outputs = model(x)
 
+        loss = nn.functional.cross_entropy(outputs, y).item()
+
+        acc = (outputs.argmax(dim=1) == y).float().mean().item()
+    
     return acc, loss
 
-def make_initial_population(origin_w, population, random, origin, mutation_rate):
+def make_initial_population(model, population, device):
     """
     初期個体を生成する関数
 
     """
-    mutated = population - random - origin
+    n_weight = 0
+    for layer in model.layers:
+        n_weight += layer.weight.numel()
 
-    # 元の個体の読み込みと元個体をめっちゃコピー
-    n_weight = origin_w.numel()
-    population_w = origin_w.repeat(population, 1)
-
-    # 元個体をもとに突然変異させた個体をmutated個(元個体も一体残す)
-    for i in range(origin, mutated + origin):
-        mutation_mask = (torch.rand(n_weight) < mutation_rate)
-        population_w[i, mutation_mask] *= -1.0
-
-    # random体は、事前BPとは無関係な完全ランダム二値重みとする。
-    population_w[mutated + origin:] = torch.where(torch.rand(random, n_weight) < 0.5, -1.0, 1.0,)
+    population_w = torch.where(torch.rand(population, n_weight, device=device) < 0.5, -1.0, 1.0,)
 
     return population_w
 
@@ -85,11 +112,9 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     """
     
     """
-    population = 300
-    random = 20
-    origin = 1
-    generations = 100
-    elite_size = 20
+    population = 500
+    generations = 5000
+    elite_size = 50
     mutation_rate = 0.0001
     random_seed = 42
 
@@ -98,18 +123,15 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     # 画像抽出専用の乱数生成器
     data_generator = torch.Generator().manual_seed(random_seed)
 
-    # 全対象層の重みを1次元にまとめる
-    origin_w = torch.cat([layer.weight.detach().cpu().reshape(-1) for layer in model.layers])
-    # 二値化
-    origin_w = torch.where(origin_w >= 0, 1.0, -1.0)
-    # 探索する重み総数を取得
-    n_weight = origin_w.numel()
-
     # 初期個体を作成
-    population_w = make_initial_population(origin_w, population, random, origin, mutation_rate)
+    population_w = make_initial_population(model, population, device)
+
+    n_weight = 0
+    for layer in model.layers:
+        n_weight += layer.weight.numel()
 
     # 最良個体を元のパラメータで初期化
-    best_w = origin_w.clone()
+    best_w = 0
     history = []
 
     # 全個体を評価
@@ -152,30 +174,16 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         best_acc = scores[best_idx]
         best_loss = losses[best_idx]
 
-        # 今回の1,500枚で、元のBPモデルも評価する
-        bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, device)
-
-        # 変更された個体数
-        changed = (best_w != origin_w).sum().item()
-
-        print(
-            f"  元BP: {bp_acc * 100:.2f}% | "
-            f"世代最良: {best_acc * 100:.2f}% | "
-            f"正答率差: {(best_acc - bp_acc) * 100:+.2f}ポイント"
-        )
-
         history.append({
             'generation': gen,
             'accuracy': best_acc,
             'loss': best_loss,
-            'changed_weights': changed
         })
 
         print(
             f"世代 [{gen}/{generations}] | "
             f"Accuracy: {best_acc * 100:.2f}% | "
-            f"Loss: {best_loss:.4f} | "
-            f"符号変化: {changed}個",
+            f"Loss: {best_loss:.4f} | ",
             flush=True
         )
 
@@ -203,11 +211,11 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
                 parent2_idx = tournament_select(scores, 3)
 
             # 2個体による一様交叉
-            cross_mask = torch.rand(n_weight) < 0.5
+            cross_mask = torch.rand(n_weight, device=device) < 0.5
             child = torch.where(cross_mask, parent_population[parent1_idx], parent_population[parent2_idx])
 
             # 二値重みの符号を突然変異させる
-            mutation_mask = torch.rand(n_weight) < mutation_rate
+            mutation_mask = torch.rand(n_weight, device=device) < mutation_rate
             child[mutation_mask] *= -1.0
 
             next_population[i] = child
@@ -222,8 +230,9 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     y_final = torch.tensor([dataset[i][1] for i in final_indices]).to(device)
 
     # 元BPを最初の候補にする
-    final_best_w = origin_w.clone()
-    final_best_acc, final_best_loss = evaluate(model, final_best_w, x_final, y_final, device)
+    final_best_w = 0
+    final_best_acc = -1.0
+    final_best_loss = float('inf')
 
     # 最終世代の全個体を固定5,000枚で評価する
     
@@ -237,14 +246,11 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             final_best_acc = acc
             final_best_loss = loss
             final_best_w = population_w[i].clone()
-            
-    changed = (final_best_w != origin_w).sum().item()
 
     print("\n固定5000枚による最終選択")
     print(
         f"Accuracy: {final_best_acc * 100:.2f}% | "
-        f"Loss: {final_best_loss:.4f} | "
-        f"符号変化: {changed}個"
+        f"Loss: {final_best_loss:.4f} | ",
     )
 
     # 選択した個体をモデルに反映
@@ -255,14 +261,12 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     return final_best_w, history
     
     
-def save_csv(before_acc, before_loss, after_acc, after_loss):
+def save_csv(after_acc, after_loss):
     """
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    os.makedirs('./output', exist_ok=True)
-
-    csv_path = ('./output/ga_cifar_3conv_200.csv')
+    csv_path = ('./output/ga_only_cifar_3conv_200.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
 
@@ -272,12 +276,6 @@ def save_csv(before_acc, before_loss, after_acc, after_loss):
             'stage',
             'test_accuracy_percent',
             'test_loss'
-        ])
-
-        writer.writerow([
-            'before_ga',
-            before_acc * 100,
-            before_loss
         ])
 
         writer.writerow([
@@ -294,12 +292,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
 
-    # BPの学習済みモデルを読み込む
-    load_path = './output/binaryconnect_cifar_3conv_seed42_500.pt'
-    checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
-    model = BinaryConnectCifar10().to(device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
+    model = GACifar10().to(device)
 
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -314,21 +307,14 @@ def main():
     # GA最終選択用5,000枚の画像番号
     ga_final_indices = list(range(45000, 50000))
 
-    # 公式テスト画像は候補選択に使わない
     x_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))]).to(device)
     y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))]).to(device)
-
-    # GA前を評価
-    origin_w = torch.cat([layer.weight.detach().cpu().reshape(-1) for layer in model.layers])
-    origin_w = torch.where(origin_w >= 0, 1.0, -1.0)
-    before_acc, before_loss = evaluate(model, origin_w, x_test, y_test, device)
 
     # GA実行とGA後の評価
     best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size)
     after_acc, after_loss = evaluate(model, best_w, x_test, y_test, device)
 
-    print(f"Test Accuracy: {before_acc * 100:.2f}% → {after_acc * 100:.2f}%")
-    print(f"変化: {(after_acc - before_acc) * 100:+.2f}ポイント")
+    print(f"Test Accuracy: {after_acc * 100:.2f}%")
 
     generations = [h['generation'] for h in history]
 
@@ -355,10 +341,10 @@ def main():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig('./output/ga_cifar_3conv_200.png')
+    plt.savefig('./output/ga_only_cifar_3conv_200.png')
     plt.close()
 
-    save_csv(before_acc, before_loss, after_acc, after_loss)
+    save_csv(after_acc, after_loss)
 
 if __name__ == '__main__':
     main()
