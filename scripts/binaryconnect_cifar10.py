@@ -189,7 +189,7 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_3conv_result_500.png')
+    graph_path = ('./output/binaryconnect_cifar_3conv_seed43_result_500.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
@@ -204,7 +204,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 
     csv_path = (
         './output/'
-        'binaryconnect_cifar_3conv_result_500.csv'
+        'binaryconnect_cifar_3conv_seed_43_result_500.csv'
     )
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
@@ -240,7 +240,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 
 def main():
 
-    random_seed = 42
+    random_seed = 43
     epochs = 500
     batch_size = 64
     learning_rate = 0.001
@@ -314,14 +314,14 @@ def main():
         test_accuracies.append(test_acc)
         test_losses.append(test_loss)
 
-        print(f"Epoch [{epoch}/{epochs}] - Train Loss: {train_loss:.4f} | Train Acc: {test_acc:.2f} | Test Loss: {test_acc:.4f} | Test Acc: {test_acc:.2f}%")
+        print(f"Epoch [{epoch}/{epochs}] - Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f} | Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.2f}%")
 
     plot(train_losses, train_accuracies, test_losses, test_accuracies)
     save_csv(train_losses, train_accuracies, test_losses, test_accuracies)
 
    # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_3conv_seed42_500.pt'
+    save_path = './output/binaryconnect_cifar_3conv_seed43_500.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),

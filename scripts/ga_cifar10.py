@@ -67,15 +67,15 @@ def make_initial_population(origin_w, population, random, origin, mutation_rate)
     return population_w
 
 
-def tournament_select(scores, k):
+def tournament_select(losses, k):
     """
     
     """
-    candidates = np.random.choice(len(scores), k, replace=False)
+    candidates = np.random.choice(len(losses), k, replace=False)
     best_idx = candidates[0]
 
     for i in candidates:
-        if scores[i] > scores[best_idx]:
+        if losses[i] < losses[best_idx]:
             best_idx = i
 
     return best_idx
@@ -142,8 +142,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         # 正答率の降順、同率ならLossの昇順に並べる
         ranked_indices = sorted(
             range(population),
-            key=lambda i: (scores[i], -losses[i]),
-            reverse=True
+            key=lambda i: losses[i],
         )
 
         # この世代で最も良い個体
@@ -195,12 +194,12 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
         # 残りの180個体を交叉と突然変異で生成
         for i in range(elite_size, population):
-            parent1_idx = tournament_select(scores, 3)
-            parent2_idx = tournament_select(scores, 3)
+            parent1_idx = tournament_select(losses, 3)
+            parent2_idx = tournament_select(losses, 3)
 
             # 同じ個体同士の交叉を避ける
             while parent2_idx == parent1_idx:
-                parent2_idx = tournament_select(scores, 3)
+                parent2_idx = tournament_select(losses, 3)
 
             # 2個体による一様交叉
             cross_mask = torch.rand(n_weight) < 0.5
@@ -233,7 +232,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
         # 正答率が高い個体を選ぶ
         # 同率の場合はLossが小さい個体を選ぶ
-        if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
+        if loss < final_best_loss:
             final_best_acc = acc
             final_best_loss = loss
             final_best_w = population_w[i].clone()
