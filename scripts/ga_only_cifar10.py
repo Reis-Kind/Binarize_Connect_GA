@@ -287,7 +287,7 @@ def save_csv(after_acc, after_loss):
 
 def main():
 
-    eval_size = 1500
+    eval_size = 2000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
