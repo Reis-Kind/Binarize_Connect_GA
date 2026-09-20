@@ -189,7 +189,7 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_noaug_3conv_seed43_result_500.png')
+    graph_path = ('./output/binaryconnect_cifar_noaug_variGAdata_3conv_seed42_result_500.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
@@ -204,7 +204,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 
     csv_path = (
         './output/'
-        'binaryconnect_cifar_noaug_3conv_seed_43_result_500.csv'
+        'binaryconnect_cifar_noaug_variGAdata_3conv_seed_42_result_500.csv'
     )
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
@@ -240,7 +240,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 
 def main():
 
-    random_seed = 43
+    random_seed = 42
     epochs = 500
     batch_size = 64
     learning_rate = 0.001
@@ -263,7 +263,13 @@ def main():
 
 
     train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    #BPでは使わず，GAの最終評価に使うデータを切り分けておく
+    train_indices = list(range(45000))
+    ga_indices = list(range(45000, 50000))
+
+    train_subset = Subset(train_dataset, train_indices)
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
 
     # テストデータをTensorにまとめる
@@ -319,7 +325,7 @@ def main():
 
    # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_noaug_3conv_seed43_500.pt'
+    save_path = './output/binaryconnect_cifar_noaug_variGAdata_3conv_seed42_500.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
