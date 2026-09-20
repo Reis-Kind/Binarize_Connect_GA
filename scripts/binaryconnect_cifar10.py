@@ -13,23 +13,23 @@ class BinaryConnectCifar10(nn.Module):
 
         # 実数の重み
         # RGBで3チャネルあるから3（Mnistは白黒だから1）
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
-        self.fc = nn.Linear(64 * 4 * 4, 10)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1,  bias=False)
+        self.fc = nn.Linear(128 * 4 * 4, 10)
         self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
 
         # 二値化の重み
-        self.b_conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
-        self.b_conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
-        self.b_conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
-        self.b_fc = nn.Linear(64 * 4 * 4, 10)
+        self.b_conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
+        self.b_conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.b_conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1,  bias=False)
+        self.b_fc = nn.Linear(128 * 4 * 4, 10)
         self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3, self.b_fc])
 
         # 神の一手
-        self.bn1 = nn.BatchNorm2d(16)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.bn3 = nn.BatchNorm2d(64)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.bn3 = nn.BatchNorm2d(128)
 
         self.pool = nn.MaxPool2d(2)
         self.relu = nn.ReLU()
@@ -189,7 +189,7 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_noaug_variGAdata_3conv_seed42_result_500.png')
+    graph_path = ('./output/binaryconnect_cifar_noaug_variGAdata_3conv_128_seed42_result_500.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
@@ -204,7 +204,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 
     csv_path = (
         './output/'
-        'binaryconnect_cifar_noaug_variGAdata_3conv_seed_42_result_500.csv'
+        'binaryconnect_cifar_noaug_variGAdata_3conv_128_seed_42_result_500.csv'
     )
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
@@ -267,8 +267,8 @@ def main():
     #BPでは使わず，GAの最終評価に使うデータを切り分けておく
     train_indices = list(range(45000))
     ga_indices = list(range(45000, 50000))
-
     train_subset = Subset(train_dataset, train_indices)
+
     train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
 
@@ -325,7 +325,7 @@ def main():
 
    # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_noaug_variGAdata_3conv_seed42_500.pt'
+    save_path = './output/binaryconnect_cifar_noaug_variGAdata_3conv_128_seed42_500.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
