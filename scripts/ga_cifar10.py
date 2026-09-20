@@ -77,7 +77,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     origin = 1
     generations = 100
     elite_size = 20
-    mutation_rate = 0.0001
+    mutation_rate = 0.00005
     random_seed = 42
 
     torch.manual_seed(random_seed)
@@ -285,7 +285,7 @@ def save_csv(history, after_acc, after_loss):
 
 def main():
 
-    eval_size = 2000
+    eval_size = 1000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
