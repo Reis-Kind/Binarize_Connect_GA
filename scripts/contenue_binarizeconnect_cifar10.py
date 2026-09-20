@@ -12,16 +12,18 @@ class BinaryConnectCifar10(nn.Module):
 
         # 実数の重み
         # RGBで3チャネルあるから3（Mnistは白黒だから1）
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2,  bias=False)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=5, padding=2,  bias=False)
-        self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3])
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.fc = nn.Linear(64 * 4 * 4, 10)
+        self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
 
         # 二値化の重み
-        self.b_conv1 = nn.Conv2d(3, 16, kernel_size=5, padding=2, bias=False)
-        self.b_conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2,  bias=False)
-        self.b_conv3 = nn.Conv2d(32, 64, kernel_size=5, padding=2,  bias=False)
-        self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3])
+        self.b_conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
+        self.b_conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
+        self.b_conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.b_fc = nn.Linear(64 * 4 * 4, 10)
+        self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3, self.b_fc])
 
         # 神の一手
         self.bn1 = nn.BatchNorm2d(16)
@@ -31,8 +33,6 @@ class BinaryConnectCifar10(nn.Module):
         self.pool = nn.MaxPool2d(2)
         self.relu = nn.ReLU()
 
-        # padding=2だから32*32→16*16→8*8
-        self.fc = nn.Linear(64 * 8 * 8, 10)
 
     def binarize(self):
         """
@@ -68,9 +68,10 @@ class BinaryConnectCifar10(nn.Module):
 
         x = self.b_conv3(x)
         x = self.relu(self.bn3(x))
+        x = self.pool(x)
 
         x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = self.b_fc(x)
 
         return x
 
@@ -176,7 +177,7 @@ def plot(train_losses, test_accuracies):
 
 def main():
 
-    random_seed = 43
+    random_seed = 42
     epochs = 50
     batch_size = 64
     learning_rate = 0.0001
@@ -186,15 +187,13 @@ def main():
     print(f"使用デバイス: {device}")
 
     # 事前学習の重みを読み込む
-    load_path = './output/binaryconnect_cifar_aug_3conv_bp_seed42_1500ep.pt'
+    load_path = './output/binaryconnect_cifar_noaug_3conv_seed43_500.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
 
     # データセットの準備（正規化も）
     transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) 
     ])
@@ -221,8 +220,7 @@ def main():
         list(model.layers.parameters()) +
         list(model.bn1.parameters()) +
         list(model.bn2.parameters()) +
-        list(model.bn3.parameters()) +
-        list(model.fc.parameters()),
+        list(model.bn3.parameters()),
         lr=learning_rate
     )
 

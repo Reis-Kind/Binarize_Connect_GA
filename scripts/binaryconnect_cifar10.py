@@ -189,7 +189,7 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_3conv_seed43_result_500.png')
+    graph_path = ('./output/binaryconnect_cifar_noaug_3conv_seed43_result_500.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
@@ -204,7 +204,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 
     csv_path = (
         './output/'
-        'binaryconnect_cifar_3conv_seed_43_result_500.csv'
+        'binaryconnect_cifar_noaug_3conv_seed_43_result_500.csv'
     )
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
@@ -252,8 +252,6 @@ def main():
 
     # データセットの準備（正規化も）
     transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)) 
     ])
@@ -321,12 +319,12 @@ def main():
 
    # 学習済みパラメータとデータ分割を保存
    # main()内
-    save_path = './output/binaryconnect_cifar_3conv_seed43_500.pt'
+    save_path = './output/binaryconnect_cifar_noaug_3conv_seed43_500.pt'
 
     torch.save({
         'model_state_dict': model.state_dict(),
         'epochs': epochs,
-        'seed': 42,
+        'seed': random_seed,
         'batch_size': batch_size,
         'learning_rate': learning_rate,
         'train_losses': train_losses,
