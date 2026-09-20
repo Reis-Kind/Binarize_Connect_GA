@@ -1,3 +1,3 @@
 stage,test_accuracy_percent,test_loss
 before_ga,64.39,1.0918527072906494
-after_ga,69.43,0.8910567408561707
+after_ga,69.77,0.869621812915802
