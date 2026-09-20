@@ -72,11 +72,11 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     """
     
     """
-    population = 500
-    random = 200
+    population = 200
+    random = 20
     origin = 1
     generations = 100
-    elite_size = 100
+    elite_size = 20
     mutation_rate = 0.0001
     random_seed = 42
 
@@ -138,6 +138,8 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         best_w = population_w[best_idx].clone()
         best_acc = scores[best_idx]
         best_loss = losses[best_idx]
+        # 各世代の最大スコアを保存
+        best_candidates.append(best_w.clone())
 
         # 今回の1,500枚で、元のBPモデルも評価する
         bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, device)
@@ -214,16 +216,17 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
     # 最終世代の全個体を固定5,000枚で評価する
     
-        # 最終世代の全200個体を固定5,000枚で評価する
-    for i in range(population):
-        acc, loss = evaluate(model, population_w[i], x_final, y_final, device)
+    # 最終世代の個体と，今までの世代の最高スコアの個体を評価
+    candidates = list(population_w) + best_candidates[:-1]
+    for candidate_w in candidates:
+        acc, loss = evaluate(model, candidate_w, x_final, y_final, device)
 
         # 正答率が高い個体を選ぶ
         # 同率の場合はLossが小さい個体を選ぶ
         if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
             final_best_acc = acc
             final_best_loss = loss
-            final_best_w = population_w[i].clone()
+            final_best_w = candidate_w.clone()
             
     changed = (final_best_w != origin_w).sum().item()
 
