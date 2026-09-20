@@ -98,6 +98,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     # 最良個体を元のパラメータで初期化
     best_w = origin_w.clone()
     history = []
+    best_candidates = []
 
     # 全個体を評価
     for gen in range(generations + 1):
