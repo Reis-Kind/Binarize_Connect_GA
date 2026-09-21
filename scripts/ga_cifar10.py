@@ -72,11 +72,11 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     """
     
     """
-    population = 300
-    random = 30
+    population = 500
+    random = 50
     origin = 1
-    generations = 100
-    elite_size = 30
+    generations = 300
+    elite_size = 50
     mutation_rate = 0.0001
     random_seed = 42
 
@@ -99,6 +99,10 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     best_w = origin_w.clone()
     history = []
     best_candidates = []
+
+    # GA終了後の個体選択に使う固定5,000枚
+    x_final = torch.stack([dataset[i][0] for i in final_indices]).to(device)
+    y_final = torch.tensor([dataset[i][1] for i in final_indices]).to(device)
 
     # 全個体を評価
     for gen in range(generations + 1):
@@ -145,6 +149,8 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, device)
 
         test_acc, test_loss = evaluate(model, best_w, x_test, y_test, device)
+
+        # val_acc, val_loss = evaluate(model, best_w, x_final, y_final, device)
 
         # 変更された個体数
         changed = (best_w != origin_w).sum().item()
@@ -210,12 +216,6 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         # 新しい集団に更新
         population_w = next_population
 
-
-    # 最良個体を反映し、二値化層も同期
-    # GA終了後の個体選択に使う固定5,000枚
-    x_final = torch.stack([dataset[i][0] for i in final_indices]).to(device)
-    y_final = torch.tensor([dataset[i][1] for i in final_indices]).to(device)
-
     # 元BPを最初の候補にする
     final_best_w = origin_w.clone()
     final_best_acc, final_best_loss = evaluate(model, final_best_w, x_final, y_final, device)
@@ -256,7 +256,7 @@ def save_csv(history, after_acc, after_loss):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_cifar_noaug_3conv_128_BPseed42_300_2000batch.csv')
+    csv_path = ('./output/ga_cifar_noaug_3conv_nobias_128_BPseed42_best_300_2000batch.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -297,7 +297,7 @@ def main():
     print(f"使用デバイス: {device}")
 
     # BPの学習済みモデルを読み込む
-    load_path = './output/binaryconnect_cifar_noaug_3conv_128_seed42_500.pt'
+    load_path = './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed42_300ep_best.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -313,7 +313,7 @@ def main():
 
    # GA進化用45,000枚の画像番号
     ga_train_indices = list(range(45000))
-    # GA最終選択用5,000枚の画像番号
+    # 最終選択用5,000枚の画像番号
     ga_final_indices = list(range(45000, 50000))
 
     # 公式テスト画像は候補選択に使わない
@@ -397,7 +397,7 @@ def main():
     os.makedirs('./output', exist_ok=True)
 
     plt.savefig(
-        './output/ga_cifar_noaug_3conv_128_BPseed42_300_2000batch.png',
+        './output/ga_cifar_noaug_3conv_nobias_128_BPseed42_best_300_2000batch.png',
         dpi=300
     )
     plt.close()

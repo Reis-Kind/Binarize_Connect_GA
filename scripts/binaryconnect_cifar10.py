@@ -1,5 +1,6 @@
 import os
 import csv
+import copy
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,14 +17,14 @@ class BinaryConnectCifar10(nn.Module):
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1,  bias=False)
-        self.fc = nn.Linear(128 * 4 * 4, 10)
+        self.fc = nn.Linear(128 * 4 * 4, 10, bias=False)
         self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
 
         # 二値化の重み
         self.b_conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
         self.b_conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
         self.b_conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1,  bias=False)
-        self.b_fc = nn.Linear(128 * 4 * 4, 10)
+        self.b_fc = nn.Linear(128 * 4 * 4, 10, bias=False)
         self.b_layers = nn.ModuleList([self.b_conv1, self.b_conv2, self.b_conv3, self.b_fc])
 
         # 神の一手
@@ -86,6 +87,7 @@ class BinaryConnectCifar10(nn.Module):
                 layers.weight.grad = b_layers.weight.grad.clone()
             if b_layers.bias is not None and b_layers.bias.grad is not None:
                 layers.bias.grad = b_layers.bias.grad.clone()
+
 
     def clipping(self):
         """
@@ -189,7 +191,7 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_noaug_3conv_128_seed42_result_500.png')
+    graph_path = ('./output/binaryconnect_cifar_noaug_nobias_3conv_128_seed42_result_300.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
@@ -203,8 +205,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
     os.makedirs('./output', exist_ok=True)
 
     csv_path = (
-        './output/'
-        'binaryconnect_cifar_noaug_3conv_128_seed_42_result_500.csv'
+        './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed_42_result_300.csv'
     )
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
@@ -241,7 +242,7 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
 def main():
 
     random_seed = 42
-    epochs = 500
+    epochs = 300
     batch_size = 64
     learning_rate = 0.001
     torch.manual_seed(random_seed)
@@ -282,6 +283,9 @@ def main():
     train_accuracies = []
     test_losses = []
     test_accuracies = []
+    best_test_accuracy = -float('inf')
+    best_model = None
+    save_path = './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed42_300ep_best.pt'
 
     print("学習開始")
 
@@ -305,35 +309,27 @@ def main():
         # テストデータの評価
         model.eval()
         test_acc, test_loss = test_evaluate(model, test_x, test_y, device)
-       
 
+        if best_test_accuracy < test_acc:
+            best_test_accuracy = test_acc
+            best_epoch = epoch
+            best_model = copy.deepcopy(model.state_dict())
+            torch.save({'model_state_dict': best_model}, save_path)
+
+       
         train_losses.append(train_loss)
         train_accuracies.append(train_acc)
         test_accuracies.append(test_acc)
         test_losses.append(test_loss)
 
-        print(f"Epoch [{epoch}/{epochs}] - Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f} | Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.2f}%")
-
+        print(f"Epoch [{epoch}/{epochs}] - "
+              f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f} | "
+              f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.2f}% | "
+              f"Best: {best_test_accuracy:.2f}% ({best_epoch} epoch)"
+        )
+    model.load_state_dict(best_model)
     plot(train_losses, train_accuracies, test_losses, test_accuracies)
     save_csv(train_losses, train_accuracies, test_losses, test_accuracies)
-
-   # 学習済みパラメータとデータ分割を保存
-   # main()内
-    save_path = './output/binaryconnect_cifar_noaug_3conv_128_seed42_500.pt'
-
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'epochs': epochs,
-        'seed': random_seed,
-        'batch_size': batch_size,
-        'learning_rate': learning_rate,
-        'train_losses': train_losses,
-        'test_accuracies': test_accuracies,
-        'train_accuracies': train_accuracies,
-        'test_losses': test_losses,
-    }, save_path)
-
-    print(f"学習済みパラメータを '{save_path}' に保存しました。")
 
 if __name__ == '__main__':
     main()
