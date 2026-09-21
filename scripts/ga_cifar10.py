@@ -68,7 +68,7 @@ def tournament_select(scores, losses, k):
     return best_idx
 
 
-def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size):
+def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size, x_test, y_test):
     """
     
     """
@@ -77,7 +77,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     origin = 1
     generations = 100
     elite_size = 30
-    mutation_rate = 0.00001
+    mutation_rate = 0.0001
     random_seed = 42
 
     torch.manual_seed(random_seed)
@@ -144,6 +144,8 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         # 今回の1,500枚で、元のBPモデルも評価する
         bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, device)
 
+        test_acc, test_loss = evaluate(model, best_w, x_test, y_test, device)
+
         # 変更された個体数
         changed = (best_w != origin_w).sum().item()
 
@@ -157,13 +159,17 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             'generation': gen,
             'accuracy': best_acc,
             'loss': best_loss,
-            'changed_weights': changed
+            'changed_weights': changed,
+            'test_accuracy': test_acc,
+            'test_loss': test_loss
         })
 
         print(
             f"世代 [{gen}/{generations}] | "
-            f"Accuracy: {best_acc * 100:.2f}% | "
-            f"Loss: {best_loss:.4f} | "
+            f"Train Acc: {best_acc * 100:.2f}% | "
+            f"Train Loss: {best_loss:.4f} | "
+            f"Test Acc: {test_acc * 100:.2f}% | "
+            f"Test Loss: {test_loss:.4f}",
             f"符号変化: {changed}個",
             flush=True
         )
@@ -250,7 +256,7 @@ def save_csv(history, after_acc, after_loss):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_cifar_noaug_3conv_128_BPseed42_300_5000batch.csv')
+    csv_path = ('./output/ga_cifar_noaug_3conv_128_BPseed42_300_2000batch.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -272,8 +278,8 @@ def save_csv(history, after_acc, after_loss):
                 h['accuracy'] * 100,
                 h['loss'],
                 h['changed_weights'],
-                '',
-                '',
+                h['test_accuracy'] * 100,
+                h['test_loss'],
             ])
 
         # 最終選択後のテスト結果
@@ -285,7 +291,7 @@ def save_csv(history, after_acc, after_loss):
 
 def main():
 
-    eval_size = 5000
+    eval_size = 2000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
@@ -320,7 +326,7 @@ def main():
     before_acc, before_loss = evaluate(model, origin_w, x_test, y_test, device)
 
     # GA実行とGA後の評価
-    best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size)
+    best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size, x_test, y_test)
     after_acc, after_loss = evaluate(model, best_w, x_test, y_test, device)
 
     print(f"Test Accuracy: {before_acc * 100:.2f}% → {after_acc * 100:.2f}%")
@@ -328,30 +334,72 @@ def main():
 
     generations = [h['generation'] for h in history]
 
-    plt.figure(figsize=(10, 4))
+    plt.figure(figsize=(12, 5))
 
+    # 正答率
     plt.subplot(1, 2, 1)
+
     plt.plot(
         generations,
-        [h['accuracy'] * 100 for h in history]
+        [h['accuracy'] * 100 for h in history],
+        label='Sampled Train Accuracy',
+        color='tab:green'
     )
+    plt.plot(
+        generations,
+        [h['test_accuracy'] * 100 for h in history],
+        label='Test Accuracy',
+        color='tab:blue'
+    )
+    plt.axhline(
+        y=before_acc * 100,
+        label='BP Test Accuracy',
+        color='tab:gray',
+        linestyle='--'
+    )
+
     plt.xlabel('Generation')
     plt.ylabel('Accuracy (%)')
-    plt.title('Sampled Training Accuracy')
+    plt.title('BP + GA Accuracy')
     plt.grid(True)
+    plt.legend()
 
+    # Loss
     plt.subplot(1, 2, 2)
+
     plt.plot(
         generations,
-        [h['loss'] for h in history]
+        [h['loss'] for h in history],
+        label='Sampled Train Loss',
+        color='tab:red'
     )
+    plt.plot(
+        generations,
+        [h['test_loss'] for h in history],
+        label='Test Loss',
+        color='tab:orange'
+    )
+    plt.axhline(
+        y=before_loss,
+        label='BP Test Loss',
+        color='tab:gray',
+        linestyle='--'
+    )
+
     plt.xlabel('Generation')
     plt.ylabel('Loss')
-    plt.title('Sampled Training Loss')
+    plt.title('BP + GA Loss')
     plt.grid(True)
+    plt.legend()
 
     plt.tight_layout()
-    plt.savefig('./output/ga_cifar_noaug_3conv_128_BPseed42_300_5000batch.png')
+
+    os.makedirs('./output', exist_ok=True)
+
+    plt.savefig(
+        './output/ga_cifar_noaug_3conv_128_BPseed42_300_2000batch.png',
+        dpi=300
+    )
     plt.close()
 
     save_csv(history, after_acc, after_loss)

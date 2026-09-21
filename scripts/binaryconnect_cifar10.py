@@ -263,7 +263,7 @@ def main():
 
 
     train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-    train_loader = DataLoader(train_indices, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
 
     # テストデータをTensorにまとめる

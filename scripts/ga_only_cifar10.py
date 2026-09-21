@@ -108,7 +108,7 @@ def tournament_select(scores, k):
     return best_idx
 
 
-def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size):
+def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size, x_test, y_test):
     """
     
     """
@@ -174,16 +174,22 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         best_acc = scores[best_idx]
         best_loss = losses[best_idx]
 
+        test_acc, test_loss = evaluate(model, best_w, x_test, y_test, device)
+
         history.append({
             'generation': gen,
             'accuracy': best_acc,
             'loss': best_loss,
+            'test_accuracy': test_acc,
+            'test_loss': test_loss
         })
 
         print(
             f"世代 [{gen}/{generations}] | "
-            f"Accuracy: {best_acc * 100:.2f}% | "
-            f"Loss: {best_loss:.4f} | ",
+            f"Train Acc: {best_acc * 100:.2f}% | "
+            f"Train Loss: {best_loss:.4f} | "
+            f"Test Acc: {test_acc * 100:.2f}% | "
+            f"Test Loss: {test_loss:.4f}",
             flush=True
         )
 
@@ -274,8 +280,8 @@ def save_csv(history, after_acc, after_loss):
         writer.writerow([
             'stage',
             'generation',
-            'sample_accuracy_percent',
-            'sample_loss',
+            'train_accuracy_percent',
+            'train_loss',
             'test_accuracy_percent',
             'test_loss'
         ])
@@ -286,8 +292,8 @@ def save_csv(history, after_acc, after_loss):
                 h['generation'],
                 h['accuracy'] * 100,
                 h['loss'],
-                '',
-                '',
+                h['test_accuracy'] * 100,
+                h['test_loss'],
             ])
 
         # 最終選択後のテスト結果
@@ -323,38 +329,63 @@ def main():
     y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))]).to(device)
 
     # GA実行とGA後の評価
-    best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size)
+    best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size, x_test, y_test)
     after_acc, after_loss = evaluate(model, best_w, x_test, y_test, device)
 
     print(f"Test Accuracy: {after_acc * 100:.2f}%")
 
     generations = [h['generation'] for h in history]
 
-    plt.figure(figsize=(10, 4))
+    plt.figure(figsize=(12, 5))
 
+    # Accuracy
     plt.subplot(1, 2, 1)
     plt.plot(
         generations,
-        [h['accuracy'] * 100 for h in history]
+        [h['accuracy'] * 100 for h in history],
+        color='tab:green',
+        label='Sampled Training Accuracy'
+    )
+    plt.plot(
+        generations,
+        [h['test_accuracy'] * 100 for h in history],
+        color='tab:blue',
+        label='Test Accuracy'
     )
     plt.xlabel('Generation')
     plt.ylabel('Accuracy (%)')
-    plt.title('Sampled Training Accuracy')
+    plt.title('Training and Test Accuracy')
     plt.grid(True)
+    plt.legend()
 
+    # Loss
     plt.subplot(1, 2, 2)
     plt.plot(
         generations,
-        [h['loss'] for h in history]
+        [h['loss'] for h in history],
+        color='tab:red',
+        label='Sampled Training Loss'
+    )
+    plt.plot(
+        generations,
+        [h['test_loss'] for h in history],
+        color='tab:orange',
+        label='Test Loss'
     )
     plt.xlabel('Generation')
     plt.ylabel('Loss')
-    plt.title('Sampled Training Loss')
+    plt.title('Training and Test Loss')
     plt.grid(True)
+    plt.legend()
 
     plt.tight_layout()
-    plt.savefig('./output/ga_only_cifar_3conv_128_200.png')
+
+    os.makedirs('./output', exist_ok=True)
+    graph_path = './output/ga_only_cifar_3conv_128_200.png'
+    plt.savefig(graph_path, dpi=300)
     plt.close()
+
+    print(f"グラフを '{graph_path}' に保存しました。")
 
     save_csv(history, after_acc, after_loss)
 
