@@ -11,16 +11,16 @@ class GACifar10(nn.Module):
         super().__init__()
 
         # RGBで3チャネルあるから3（Mnistは白黒だから1）
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1,  bias=False)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
-        self.fc = nn.Linear(64 * 4 * 4, 10, bias=False)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1,  bias=False)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1,  bias=False)
+        self.fc = nn.Linear(128 * 4 * 4, 10, bias=False)
         self.layers = nn.ModuleList([self.conv1, self.conv2, self.conv3, self.fc])
 
         # 神の一手
-        self.bn1 = nn.BatchNorm2d(16, track_running_stats=False)
-        self.bn2 = nn.BatchNorm2d(32, track_running_stats=False)
-        self.bn3 = nn.BatchNorm2d(64, track_running_stats=False)
+        self.bn1 = nn.BatchNorm2d(32, track_running_stats=False)
+        self.bn2 = nn.BatchNorm2d(64, track_running_stats=False)
+        self.bn3 = nn.BatchNorm2d(128, track_running_stats=False)
 
         self.pool = nn.MaxPool2d(2)
         self.relu = nn.ReLU()
@@ -261,27 +261,39 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     return final_best_w, history
     
     
-def save_csv(after_acc, after_loss):
+def save_csv(history, after_acc, after_loss):
     """
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_only_cifar_3conv_200.csv')
+    csv_path = ('./output/ga_only_cifar_3conv_128_200.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
-
         writer = csv.writer(file)
 
         writer.writerow([
             'stage',
+            'generation',
+            'sample_accuracy_percent',
+            'sample_loss',
             'test_accuracy_percent',
             'test_loss'
         ])
 
+        for h in history:
+            writer.writerow([
+                'generation',
+                h['generation'],
+                h['accuracy'] * 100,
+                h['loss'],
+                '',
+                '',
+            ])
+
+        # 最終選択後のテスト結果
         writer.writerow([
-            'after_ga',
-            after_acc * 100,
-            after_loss
+            'after_ga', '', '', '', 
+            after_acc * 100, after_loss
         ])
 
 
@@ -341,10 +353,10 @@ def main():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig('./output/ga_only_cifar_3conv_200.png')
+    plt.savefig('./output/ga_only_cifar_3conv_128_200.png')
     plt.close()
 
-    save_csv(after_acc, after_loss)
+    save_csv(history, after_acc, after_loss)
 
 if __name__ == '__main__':
     main()
