@@ -72,12 +72,12 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     """
     
     """
-    population = 300
-    random = 30
+    population = 500
+    random = 50
     origin = 1
     generations = 100
-    elite_size = 30
-    mutation_rate = 0.00001
+    elite_size = 50
+    mutation_rate = 0.0001
     random_seed = 42
 
     torch.manual_seed(random_seed)
@@ -250,7 +250,7 @@ def save_csv(history, after_acc, after_loss):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_cifar_noaug_3conv_128_BPseed42_300_5000batch.csv')
+    csv_path = ('./output/ga_cifar_noaug_4conv_128_BPseed42_500_2000batch.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -285,13 +285,13 @@ def save_csv(history, after_acc, after_loss):
 
 def main():
 
-    eval_size = 5000
+    eval_size = 2000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
 
     # BPの学習済みモデルを読み込む
-    load_path = './output/binaryconnect_cifar_noaug_3conv_128_seed42_500.pt'
+    load_path = './output/binaryconnect_cifar_noaug_4conv_128_seed42_500.pt'
     checkpoint = torch.load(load_path, map_location='cpu', weights_only=True)
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -351,7 +351,7 @@ def main():
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig('./output/ga_cifar_noaug_3conv_128_BPseed42_300_5000batch.png')
+    plt.savefig('./output/ga_cifar_noaug_4conv_128_BPseed42_500_2000batch.png')
     plt.close()
 
     save_csv(history, after_acc, after_loss)
