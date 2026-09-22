@@ -191,34 +191,47 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_noaug_nobias_3conv_128_seed42_result_300.png')
+    graph_path = ('./output/binaryconnect_cifar_noaug_nobias_3conv_128_seed44_300ep_best_val.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
     print(f"\nグラフを '{graph_path}' に保存しました。")
 
 
-def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
-    """
-    エポックごとの評価結果をCSVに保存する。
-    """
+def save_csv(
+    train_losses,
+    train_accuracies,
+    test_losses,
+    test_accuracies,
+    best_epoch,
+    best_val_accuracy,
+    selected_acc,
+    selected_loss
+):
+    """毎epochの履歴と最良モデルの結果を保存する．"""
     os.makedirs('./output', exist_ok=True)
 
     csv_path = (
-        './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed_42_result_300.csv'
+        './output/binaryconnect_cifar_noaug_'
+        '3conv_nobias_128_seed44_300ep_best_val.csv'
     )
 
-    with open(csv_path, 'w', newline='', encoding='utf-8') as file:
+    with open(
+        csv_path, 'w', newline='', encoding='utf-8'
+    ) as file:
         writer = csv.writer(file)
 
         writer.writerow([
+            'stage',
             'epoch',
             'train_loss',
-            'train_accuracy',
+            'train_accuracy_percent',
             'test_loss',
-            'test_accuracy'
+            'test_accuracy_percent',
+            'val_accuracy_percent'
         ])
 
+        # 毎epochの履歴
         for epoch, values in enumerate(
             zip(
                 train_losses,
@@ -231,17 +244,30 @@ def save_csv(train_losses, train_accuracies, test_losses, test_accuracies):
             train_loss, train_acc, test_loss, test_acc = values
 
             writer.writerow([
+                'epoch',
                 epoch,
                 train_loss,
                 train_acc,
                 test_loss,
-                test_acc
+                test_acc,
+                ''
             ])
+
+        # 検証精度で選んだモデルの最終結果
+        writer.writerow([
+            'selected_model',
+            best_epoch,
+            '',
+            '',
+            selected_loss,
+            selected_acc,
+            best_val_accuracy
+        ])
 
 
 def main():
 
-    random_seed = 42
+    random_seed = 44
     epochs = 300
     batch_size = 64
     learning_rate = 0.001
@@ -263,9 +289,22 @@ def main():
     ])
 
 
-    train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+    full_train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+    # 学習用45,000枚の画像番号
+    train_indices = list(range(45000))
+    # 最終選択用5,000枚の画像番号
+    final_indices = list(range(45000, 50000))
+    # 学習用と最強個体決定用に分割（GA学習にも使わない）
+    train_dataset = Subset(full_train_dataset, train_indices)
+    final_dataset = Subset(full_train_dataset, final_indices)
+
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
     test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+
+    # 最終決定データをTensorに
+    final_x = torch.stack([final_dataset[i][0] for i in range(len(final_dataset))]).to(device)
+    final_y = torch.tensor([final_dataset[i][1] for i in range(len(final_dataset))]).to(device)
 
     # テストデータをTensorにまとめる
     test_x = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))]).to(device)
@@ -283,9 +322,11 @@ def main():
     train_accuracies = []
     test_losses = []
     test_accuracies = []
-    best_test_accuracy = -float('inf')
+    best_final_accuracy = -float('inf')
+    best_final_loss = float('inf')
     best_model = None
-    save_path = './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed42_300ep_best.pt'
+    best_epoch = 0
+    save_path = './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed44_300ep_best_val.pt'
 
     print("学習開始")
 
@@ -310,12 +351,13 @@ def main():
         model.eval()
         test_acc, test_loss = test_evaluate(model, test_x, test_y, device)
 
-        if best_test_accuracy < test_acc:
-            best_test_accuracy = test_acc
+        # モデル選択用5,000枚の評価
+        final_acc, final_loss = test_evaluate(model, final_x, final_y, device)
+        if (final_acc > best_final_accuracy or (final_acc == best_final_accuracy and final_loss < best_final_loss)):
+            best_final_accuracy, best_final_loss = final_acc, final_loss
             best_epoch = epoch
             best_model = copy.deepcopy(model.state_dict())
             torch.save({'model_state_dict': best_model}, save_path)
-
        
         train_losses.append(train_loss)
         train_accuracies.append(train_acc)
@@ -325,11 +367,30 @@ def main():
         print(f"Epoch [{epoch}/{epochs}] - "
               f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f} | "
               f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.2f}% | "
-              f"Best: {best_test_accuracy:.2f}% ({best_epoch} epoch)"
+              f"Best: {best_final_accuracy:.2f}% ({best_epoch} epoch)"
         )
+
     model.load_state_dict(best_model)
+    selected_acc, selected_loss = test_evaluate(model, test_x, test_y, device)
+
+    print(
+        f"\nSelected Epoch: {best_epoch} | "
+        f"Best Final Acc: {best_final_accuracy:.2f}% | "
+        f"Test Acc: {selected_acc:.2f}% | "
+        f"Test Loss: {selected_loss:.4f}"
+    )
+
     plot(train_losses, train_accuracies, test_losses, test_accuracies)
-    save_csv(train_losses, train_accuracies, test_losses, test_accuracies)
+    save_csv(
+        train_losses,
+        train_accuracies,
+        test_losses,
+        test_accuracies,
+        best_epoch,
+        best_final_accuracy,
+        selected_acc,
+        selected_loss
+    )
 
 if __name__ == '__main__':
     main()

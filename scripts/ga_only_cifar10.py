@@ -94,7 +94,7 @@ def make_initial_population(model, population, device):
     return population_w
 
 
-def tournament_select(scores, k):
+def tournament_select(scores, losses, k):
     """
     
     """
@@ -102,7 +102,7 @@ def tournament_select(scores, k):
     best_idx = candidates[0]
 
     for i in candidates:
-        if scores[i] > scores[best_idx]:
+        if scores[i] > scores[best_idx] or (scores[i] == scores[best_idx] and losses[i] < losses[best_idx]):
             best_idx = i
 
     return best_idx
@@ -113,8 +113,8 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     
     """
     population = 500
-    generations = 1000
-    elite_size = 100
+    generations = 10000
+    elite_size = 50
     mutation_rate = 0.0001
     random_seed = 42
 
@@ -133,6 +133,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     # 最良個体を元のパラメータで初期化
     best_w = 0
     history = []
+    # best_candidates = []
 
     # 全個体を評価
     for gen in range(generations + 1):
@@ -173,6 +174,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         best_w = population_w[best_idx].clone()
         best_acc = scores[best_idx]
         best_loss = losses[best_idx]
+        # best_candidates.append(best_w.clone())
 
         test_acc, test_loss = evaluate(model, best_w, x_test, y_test, device)
 
@@ -183,6 +185,8 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             'test_accuracy': test_acc,
             'test_loss': test_loss
         })
+
+        save_csv(history)
 
         print(
             f"世代 [{gen}/{generations}] | "
@@ -201,20 +205,20 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         parent_population = population_w.clone()
         next_population = torch.empty_like(population_w)
 
-        # 上位20個体をそのまま次世代へ保存
+        # 上位個体をそのまま次世代へ保存
         elite_indices = ranked_indices[:elite_size]
 
         for next_i, elite_idx in enumerate(elite_indices):
             next_population[next_i] = parent_population[elite_idx].clone()
 
-        # 残りの180個体を交叉と突然変異で生成
+        # 交叉と突然変異
         for i in range(elite_size, population):
-            parent1_idx = tournament_select(scores, 3)
-            parent2_idx = tournament_select(scores, 3)
+            parent1_idx = tournament_select(scores, losses, 3)
+            parent2_idx = tournament_select(scores, losses, 3)
 
             # 同じ個体同士の交叉を避ける
             while parent2_idx == parent1_idx:
-                parent2_idx = tournament_select(scores, 3)
+                parent2_idx = tournament_select(scores, losses, 3)
 
             # 2個体による一様交叉
             cross_mask = torch.rand(n_weight, device=device) < 0.5
@@ -242,10 +246,21 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
     # 最終世代の全個体を固定5,000枚で評価する
     
-        # 最終世代の全200個体を固定5,000枚で評価する
+    # 最終世代の個体を固定5,000枚で評価する
+    # candidates = list(population_w) + best_candidates[:-1]
+    """for candidate_w in candidates:
+        acc, loss = evaluate(model, candidate_w, x_final, y_final, device)
+
+        # 正答率が高い個体を選ぶ
+        # 同率の場合はLossが小さい個体を選ぶ
+        if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
+            final_best_acc = acc
+            final_best_loss = loss
+            final_best_w = candidate_w.clone()"""
+    
     for i in range(population):
         acc, loss = evaluate(model, population_w[i], x_final, y_final, device)
-
+ 
         # 正答率が高い個体を選ぶ
         # 同率の場合はLossが小さい個体を選ぶ
         if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
@@ -267,12 +282,12 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     return final_best_w, history
     
     
-def save_csv(history, after_acc, after_loss):
+def save_csv(history, after_acc=None, after_loss=None):
     """
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_only_cifar_3conv_128_500_0.0001_1000ep.csv')
+    csv_path = ('./output/ga_only_cifar_3conv_128_500_0.00001_200batch_10000ep.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -297,10 +312,11 @@ def save_csv(history, after_acc, after_loss):
             ])
 
         # 最終選択後のテスト結果
-        writer.writerow([
-            'after_ga', '', '', '', 
-            after_acc * 100, after_loss
-        ])
+        if after_acc is not None and after_loss is not None:
+            writer.writerow([
+                'after_ga', '', '', '', 
+                after_acc * 100, after_loss
+            ])
 
 
 def main():
@@ -381,7 +397,7 @@ def main():
     plt.tight_layout()
 
     os.makedirs('./output', exist_ok=True)
-    graph_path = './output/ga_only_cifar_3conv_128_500_0.0001_1000ep.png'
+    graph_path = './output/ga_only_cifar_3conv_128_500_0.00001_200batch_10000ep.png'
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
