@@ -6,67 +6,76 @@ CSV_FILE = "./output/ronbun/binaryconnect_cifar_noaug_3conv_nobias_128_seed44_30
 
 df = pd.read_csv(CSV_FILE)
 
-# 世代データだけ取得
-ga_df = df[df["stage"] == "epoch"].copy()
+# epochデータだけ取得
+bp_df = df[df["stage"] == "epoch"].copy()
 
-epochs = ga_df["epoch"]
-
-
-plt.figure(figsize=(12, 5))
+epochs = bp_df["epoch"]
 
 
 # =========================
-# 正答率
+# Accuracy
 # =========================
-plt.subplot(1, 2, 1)
+plt.figure(figsize=(6, 4))
 
 plt.plot(
     epochs,
-    ga_df["train_accuracy_percent"],
+    bp_df["train_accuracy_percent"],
     label="Train Accuracy",
     color="black"
 )
 
 plt.plot(
     epochs,
-    ga_df["test_accuracy_percent"],
+    bp_df["test_accuracy_percent"],
     label="Test Accuracy",
     color="tab:red"
 )
 
-plt.xlabel("epoch")
+plt.xlabel("Epoch")
 plt.ylabel("Accuracy (%)")
 
-# 縦軸を0〜80%に固定
 plt.ylim(top=90)
 plt.xlim(left=0)
 plt.margins(x=0)
 
-
 plt.grid(True)
 plt.legend()
+plt.tight_layout()
+
+plt.savefig(
+    "./output/binaryconnect_accuracy.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.savefig(
+    "./output/binaryconnect_accuracy.pdf",
+    bbox_inches="tight"
+)
+
+plt.close()
 
 
 # =========================
 # Loss
 # =========================
-plt.subplot(1, 2, 2)
+plt.figure(figsize=(6, 4))
 
 plt.plot(
     epochs,
-    ga_df["train_loss"],
+    bp_df["train_loss"],
     label="Train Loss",
     color="black"
 )
 
 plt.plot(
     epochs,
-    ga_df["test_loss"],
+    bp_df["test_loss"],
     label="Test Loss",
     color="tab:red"
 )
 
-plt.xlabel("epoch")
+plt.xlabel("Epoch")
 plt.ylabel("Loss")
 
 plt.xlim(left=0)
@@ -74,10 +83,17 @@ plt.margins(x=0)
 
 plt.grid(True)
 plt.legend()
-
-
 plt.tight_layout()
 
-plt.savefig("./output/bin_cone_ronbun.png", dpi=300)
+plt.savefig(
+    "./output/binaryconnect_loss.png",
+    dpi=300,
+    bbox_inches="tight"
+)
 
-plt.show()
+plt.savefig(
+    "./output/binaryconnect_loss.pdf",
+    bbox_inches="tight"
+)
+
+plt.close()

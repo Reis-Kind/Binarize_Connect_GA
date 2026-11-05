@@ -12,13 +12,10 @@ ga_df = df[df["stage"] == "generation"].copy()
 generations = ga_df["generation"]
 
 
-plt.figure(figsize=(12, 5))
-
-
 # =========================
-# 正答率
+# Accuracy
 # =========================
-plt.subplot(1, 2, 1)
+plt.figure(figsize=(6, 4))
 
 plt.plot(
     generations,
@@ -37,20 +34,32 @@ plt.plot(
 plt.xlabel("Generation")
 plt.ylabel("Accuracy (%)")
 
-# 縦軸を0〜80%に固定
 plt.ylim(top=90)
 plt.xlim(left=0)
 plt.margins(x=0)
 
-
 plt.grid(True)
 plt.legend()
+plt.tight_layout()
+
+plt.savefig(
+    "./output/ga_only_accuracy.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.savefig(
+    "./output/ga_only_accuracy.pdf",
+    bbox_inches="tight"
+)
+
+plt.close()
 
 
 # =========================
 # Loss
 # =========================
-plt.subplot(1, 2, 2)
+plt.figure(figsize=(6, 4))
 
 plt.plot(
     generations,
@@ -74,10 +83,17 @@ plt.margins(x=0)
 
 plt.grid(True)
 plt.legend()
-
-
 plt.tight_layout()
 
-plt.savefig("./output/ga_only_ronbun.png", dpi=300)
+plt.savefig(
+    "./output/ga_only_loss.png",
+    dpi=300,
+    bbox_inches="tight"
+)
 
-plt.show()
+plt.savefig(
+    "./output/ga_only_loss.pdf",
+    bbox_inches="tight"
+)
+
+plt.close()

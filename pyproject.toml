@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "matplotlib>=3.11.1",
+    "pandas>=3.0.6",
     "torch>=2.6.0",
     "torchvision>=0.21.0",
 ]
