@@ -113,7 +113,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     
     """
     population = 500
-    generations = 10000
+    generations = 50000
     elite_size = 50
     mutation_rate = 0.0001
     random_seed = 42

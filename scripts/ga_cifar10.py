@@ -77,9 +77,9 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     population = 500
     random = 50
     origin = 1
-    generations = 1000
+    generations = 10000
     elite_size = 50
-    mutation_rate = 0.0001
+    mutation_rate = 0.01
     random_seed = 42
 
     torch.manual_seed(random_seed)
@@ -259,7 +259,7 @@ def save_csv(history, after_acc=None, after_loss=None):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_1000.csv')
+    csv_path = ('./output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.01_10000.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -400,7 +400,7 @@ def main():
     os.makedirs('./output', exist_ok=True)
 
     plt.savefig(
-        './output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_1000.png',
+        './output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.001_10000.png',
         dpi=300
     )
     plt.close()
