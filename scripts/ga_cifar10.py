@@ -47,7 +47,17 @@ def make_initial_population(origin_w, population, random, origin, mutation_rate)
 
     # 元個体をもとに突然変異させた個体をmutated個(元個体も一体残す)
     for i in range(origin, mutated + origin):
-        mutation_mask = (torch.rand(n_weight, device=device) < mutation_rate)
+        # 突然変異個体の中で何番目か
+        j = i - origin
+
+        if j < int(mutated * 0.7):
+            individual_rate = 0.0001
+        elif j < int(mutated * 0.9):
+            individual_rate = 0.001
+        else:
+            individual_rate = 0.01
+
+        mutation_mask = (torch.rand(n_weight, device=device) < individual_rate)
         population_w[i, mutation_mask] *= -1.0
 
     # random体は、事前BPとは無関係な完全ランダム二値重みとする。
@@ -77,7 +87,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     population = 500
     random = 50
     origin = 1
-    generations = 1000
+    generations = 5000
     elite_size = 50
     mutation_rate = 0.0001
     random_seed = 42
@@ -211,9 +221,20 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             child = torch.where(cross_mask, parent_population[parent1_idx], parent_population[parent2_idx])
 
             # 二値重みの符号を突然変異させる
-            mutation_mask = torch.rand(n_weight, device=device) < mutation_rate
-            child[mutation_mask] *= -1.0
+            # 子個体450体を，突然変異率の異なる3群に分ける
+            n_children = population - elite_size
+            child_index = i - elite_size
 
+            if child_index < int(n_children * 0.7):
+                child_mutation_rate = 0.0001
+            elif child_index < int(n_children * 0.9):
+                child_mutation_rate = 0.001
+            else:
+                child_mutation_rate = 0.01
+
+            # この子個体に適用する突然変異
+            mutation_mask = (torch.rand(n_weight, device=device) < child_mutation_rate)
+            child[mutation_mask] *= -1.0
             next_population[i] = child
 
         # 新しい集団に更新
@@ -259,7 +280,7 @@ def save_csv(history, after_acc=None, after_loss=None):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_1000.csv')
+    csv_path = ('./output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_5000.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -400,7 +421,7 @@ def main():
     os.makedirs('./output', exist_ok=True)
 
     plt.savefig(
-        './output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_1000.png',
+        './output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_5000.png',
         dpi=300
     )
     plt.close()
