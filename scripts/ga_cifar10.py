@@ -23,7 +23,7 @@ def evaluate(model, w, x, y, device):
             size = layer.weight.numel()
             # 現在の層の重みだけを切り出す
             new_weight = w[offset:offset + size].view_as(layer.weight).contiguous()
-            layer.weight.copy_(w[offset:offset + size].view_as(new_weight))
+            layer.weight.data.copy_(new_weight)
             offset += size
 
         x, y = x.to(device), y.to(device)
