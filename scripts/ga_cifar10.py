@@ -116,20 +116,17 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     x_final = torch.stack([dataset[i][0] for i in final_indices]).to(device)
     y_final = torch.tensor([dataset[i][1] for i in final_indices]).to(device)
 
+    order = torch.randperm(len(train_indices), generator=data_generator)[:eval_size].tolist()
+    
+    # CIFAR-10データセット内の画像番号に変換
+    indices = [train_indices[i] for i in order]
+    
+    # 今回の世代で使う画像とラベル
+    x_eval = torch.stack([dataset[i][0] for i in indices]).to(device)
+    y_eval = torch.tensor([dataset[i][1] for i in indices], device=device)
+    
     # 全個体を評価
     for gen in range(generations + 1):
-
-        order = torch.randperm(
-            len(train_indices),
-            generator=data_generator
-        )[:eval_size].tolist()
-
-        # CIFAR-10データセット内の画像番号に変換
-        indices = [train_indices[i] for i in order]
-
-        # 今回の世代で使う画像とラベル
-        x_eval = torch.stack([dataset[i][0] for i in indices]).to(device)
-        y_eval = torch.tensor([dataset[i][1] for i in indices], device=device)
 
         # 前の世代から持ち越した候補を、
         # 今回の画像で評価し直す
