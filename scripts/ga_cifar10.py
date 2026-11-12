@@ -324,7 +324,6 @@ def main():
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
-    model = torch.compile(model, dynamic=True)
 
     transform = transforms.Compose([
         transforms.ToTensor(),
