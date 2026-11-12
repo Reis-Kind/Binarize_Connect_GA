@@ -27,9 +27,10 @@ def evaluate(model, w, x, y, device):
             offset += size
 
         x, y = x.to(device), y.to(device)
-        outputs = model(x)
-        loss = nn.functional.cross_entropy(outputs, y).item()
-        acc = (outputs.argmax(dim=1) == y).float().mean().item()
+        with torch.autocast(device_type='cuda', dtype=torch.float16):
+            outputs = model(x)
+            loss = nn.functional.cross_entropy(outputs, y).item()
+            acc = (outputs.argmax(dim=1) == y).float().mean().item()
 
     return acc, loss
 
