@@ -113,7 +113,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     
     """
     population = 500
-    generations = 50000
+    generations = 10000
     elite_size = 50
     mutation_rate = 0.0001
     random_seed = 42
@@ -287,7 +287,7 @@ def save_csv(history, after_acc=None, after_loss=None):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_only_cifar_3conv_128_500_0.00001_200batch_10000ep.csv')
+    csv_path = ('./output/ga_only_cifar_3conv_128_500_newMutation_200batch_10000ep.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -397,7 +397,7 @@ def main():
     plt.tight_layout()
 
     os.makedirs('./output', exist_ok=True)
-    graph_path = './output/ga_only_cifar_3conv_128_500_0.00001_200batch_10000ep.png'
+    graph_path = './output/ga_only_cifar_3conv_128_500_newMutation_200batch_10000ep.png'
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
