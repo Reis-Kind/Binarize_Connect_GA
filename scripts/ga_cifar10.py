@@ -22,7 +22,8 @@ def evaluate(model, w, x, y, device):
             # 現在の層に重みが何個あるか
             size = layer.weight.numel()
             # 現在の層の重みだけを切り出す
-            layer.weight.copy_(w[offset:offset + size].view_as(layer.weight))
+            new_weight = w[offset:offset + size].view_as(layer.weight).contiguous()
+            layer.weight.copy_(w[offset:offset + size].view_as(new_weight))
             offset += size
 
         x, y = x.to(device), y.to(device)
@@ -322,8 +323,8 @@ def main():
     model = BinaryConnectCifar10().to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
-    model = torch.compile(model)
-    
+    model = torch.compile(model, dynamic=True)
+
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
