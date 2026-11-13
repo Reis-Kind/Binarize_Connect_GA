@@ -24,7 +24,7 @@ EVAL_BATCH = 500
 
 # 試し実行のときだけ変える(本番のCSV/PNGを上書きしないため)
 GENERATIONS = 5          # 試すときは 5 など
-OUTPUT_TAG = ''            # 試すときは '_fasttest' など
+OUTPUT_TAG = '_fasttest'            # 試すときは '_fasttest' など
 OUT_BASE = './output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_5000'
 
 
