@@ -129,8 +129,6 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
     # 全個体を評価
     for gen in range(generations + 1):
 
-        # 前の世代から持ち越した候補を、
-        # 今回の画像で評価し直す
         order = torch.randperm(len(train_indices), generator=data_generator)[:eval_size].tolist()
             
         # CIFAR-10データセット内の画像番号に変換
@@ -141,25 +139,49 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
         x_eval = x_all[sel]
         y_eval = y_all[sel]
 
+        x_eval_folds = torch.tensor_split(x_eval, 4, dim=0)
+        y_eval_folds = torch.tensor_split(y_eval, 4, dim=0)
+
         scores = []
+        mean_accuracies = []
+        accuracy_stds = []
         losses = []
 
         for i in range(population):
-            acc, loss = evaluate(model, population_w[i], x_eval, y_eval, 500, device)
-            scores.append(acc)
-            losses.append(loss)
+            fold_accs = []
+            fold_losses = []
 
-        # 正答率の降順、同率ならLossの昇順に並べる
-        ranked_indices = sorted(
-            range(population),
+            for x_fold, y_fold in zip(x_eval_folds, y_eval_folds):
+                acc, loss = evaluate(model, population_w[i], x_fold, y_fold, 500, device)
+                fold_accs.append(acc)
+                fold_losses.append(loss)
+
+            mean_acc = float(np.mean(fold_accs))
+            accuracy_std = float(np.std(fold_accs))
+            mean_loss = float(np.mean(fold_losses))
+
+            # 平均精度を保ちつつ、群ごとのばらつきを少し減点する
+            robust_score = mean_acc - 0.5 * accuracy_std
+
+            scores.append(robust_score)
+            mean_accuracies.append(mean_acc)
+            accuracy_stds.append(accuracy_std)
+            losses.append(mean_loss)
+
+        # 安定性スコアの降順、同率なら平均Lossの昇順に並べる
+        ranked_indices = sorted(range(population),
             key=lambda i: (scores[i], -losses[i]), reverse=True
         )
 
         # この世代で最も良い個体
         best_idx = ranked_indices[0]
         best_w = population_w[best_idx].clone()
-        best_acc = scores[best_idx]
+
+        best_acc = mean_accuracies[best_idx]
+        best_std = accuracy_stds[best_idx]
+        best_score = scores[best_idx]
         best_loss = losses[best_idx]
+
         # 各世代の最大スコアを保存
         best_candidates.append(best_w.clone())
 
@@ -175,12 +197,16 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
         print(
             f"  元BP: {bp_acc * 100:.2f}% | "
             f"世代最良: {best_acc * 100:.2f}% | "
-            f"正答率差: {(best_acc - bp_acc) * 100:+.2f}ポイント"
+            f"正答率差: {(best_acc - bp_acc) * 100:+.2f}ポイント | "
+            f"4群の標準偏差: {best_std * 100:.3f}ポイント | "
+            f"安定性スコア: {best_score * 100:.2f}%"
         )
 
         history.append({
             'generation': gen,
             'accuracy': best_acc,
+            'accuracy_std': best_std,
+            'stability_score': best_score,
             'loss': best_loss,
             'changed_weights': changed,
             'test_accuracy': test_acc,
@@ -193,6 +219,8 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
         print(
             f"世代 [{gen}/{generations}] | "
             f"Train Acc: {best_acc * 100:.2f}% | "
+            f"Fold SD: {best_std * 100:.3f}pt | "
+            f"Stability: {best_score * 100:.2f}% | "
             f"Train Loss: {best_loss:.4f} | "
             f"Test Acc: {test_acc * 100:.2f}% | "
             f"Test Loss: {test_loss:.4f}",
@@ -296,6 +324,8 @@ def save_csv(history, after_acc=None, after_loss=None):
             'stage',
             'generation',
             'sample_accuracy_percent',
+            'sample_accuracy_std_percent',
+            'stability_score_percent',
             'sample_loss',
             'changed_weights',
             'test_accuracy_percent',
@@ -307,6 +337,8 @@ def save_csv(history, after_acc=None, after_loss=None):
                 'generation',
                 h['generation'],
                 h['accuracy'] * 100,
+                h['accuracy_std'] * 100,
+                h['stability_score'] * 100,
                 h['loss'],
                 h['changed_weights'],
                 h['test_accuracy'] * 100,
@@ -315,7 +347,7 @@ def save_csv(history, after_acc=None, after_loss=None):
 
         if after_acc is not None and after_loss is not None:
             writer.writerow([
-                'after_ga', '', '', '', '',
+                'after_ga', '', '', '', '', '', '',
                 after_acc * 100, after_loss
             ])
 
