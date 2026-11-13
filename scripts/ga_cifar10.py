@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 from binaryconnect_cifar10 import BinaryConnectCifar10
 
-def evaluate(model, w, x, y, device):
+def evaluate(model, w, x, y, eval_batch, device):
     """
     個体の重みをmodel.layersへ設定し、正答率とLossを計算。
     正答率は0～1で返す。
@@ -27,10 +27,17 @@ def evaluate(model, w, x, y, device):
             offset += size
 
         x, y = x.to(device), y.to(device)
-        with torch.autocast(device_type='cuda', dtype=torch.float16):
-            outputs = model(x)
-            loss = nn.functional.cross_entropy(outputs, y).item()
-            acc = (outputs.argmax(dim=1) == y).float().mean().item()
+        n = len(x)
+        loss_sum = torch.zeros((), device=device)
+        correct = torch.zeros((), device=device)
+        for s in range(0, n, eval_batch):
+            xb, yb = x[s:s + eval_batch], y[s:s + eval_batch]
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                outputs = model(xb)
+                loss_sum += nn.functional.cross_entropy(outputs, yb, reduction='sum')
+                correct += (outputs.argmax(dim=1) == yb).sum()
+        loss = (loss_sum / n).item()
+        acc = (correct / n).item()
 
     return acc, loss
 
@@ -82,7 +89,7 @@ def tournament_select(scores, losses, k):
     return best_idx
 
 
-def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size, x_test, y_test):
+def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device, eval_size, x_test, y_test):
     """
     
     """
@@ -115,8 +122,9 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     best_candidates = []
 
     # GA終了後の個体選択に使う固定5,000枚
-    x_final = torch.stack([dataset[i][0] for i in final_indices]).to(device)
-    y_final = torch.tensor([dataset[i][1] for i in final_indices]).to(device)
+    final_idx_t = torch.tensor(final_indices, device=device)
+    x_final = x_all[final_idx_t]
+    y_final = y_all[final_idx_t]
     
     # 全個体を評価
     for gen in range(generations + 1):
@@ -129,14 +137,15 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         indices = [train_indices[i] for i in order]
             
         # 今回の世代で使う画像とラベル
-        x_eval = torch.stack([dataset[i][0] for i in indices]).to(device)
-        y_eval = torch.tensor([dataset[i][1] for i in indices], device=device)
+        sel = torch.tensor(indices, device=device)
+        x_eval = x_all[sel]
+        y_eval = y_all[sel]
 
         scores = []
         losses = []
 
         for i in range(population):
-            acc, loss = evaluate(model, population_w[i], x_eval, y_eval, device)
+            acc, loss = evaluate(model, population_w[i], x_eval, y_eval, 500, device)
             scores.append(acc)
             losses.append(loss)
 
@@ -154,9 +163,9 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         # 各世代の最大スコアを保存
         best_candidates.append(best_w.clone())
 
-        bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, device)
+        bp_acc, bp_loss = evaluate(model, origin_w, x_eval, y_eval, 500, device)
 
-        test_acc, test_loss = evaluate(model, best_w, x_test, y_test, device)
+        test_acc, test_loss = evaluate(model, best_w, x_test, y_test, 500, device)
 
         # val_acc, val_loss = evaluate(model, best_w, x_final, y_final, device)
 
@@ -240,14 +249,14 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
 
     # 元BPを最初の候補にする
     final_best_w = origin_w.clone()
-    final_best_acc, final_best_loss = evaluate(model, final_best_w, x_final, y_final, device)
+    final_best_acc, final_best_loss = evaluate(model, final_best_w, x_final, y_final, 500, device)
 
     # 最終世代の全個体を固定5,000枚で評価する
     
     # 最終世代の個体と，今までの世代の最高スコアの個体を評価
     candidates = list(population_w) + best_candidates[:-1]
     for candidate_w in candidates:
-        acc, loss = evaluate(model, candidate_w, x_final, y_final, device)
+        acc, loss = evaluate(model, candidate_w, x_final, y_final, 500, device)
 
         # 正答率が高い個体を選ぶ
         # 同率の場合はLossが小さい個体を選ぶ
@@ -266,7 +275,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     )
 
     # 選択した個体をモデルに反映
-    evaluate(model, final_best_w, x_final, y_final, device)
+    evaluate(model, final_best_w, x_final, y_final, 500, device)
 
   
 
@@ -311,6 +320,15 @@ def save_csv(history, after_acc=None, after_loss=None):
             ])
 
 
+def load_cifar_tensors(dataset, device):
+    mean = torch.tensor((0.4914, 0.4822, 0.4465), device=device).view(1, 3, 1, 1)
+    std = torch.tensor((0.2023, 0.1994, 0.2010), device=device).view(1, 3, 1, 1)
+    x = torch.from_numpy(dataset.data).to(device).permute(0, 3, 1, 2).float().div(255.0)
+    x = ((x - mean) / std).half().contiguous()
+    y = torch.tensor(dataset.targets, device=device)
+    return x, y
+
+
 def main():
 
     eval_size = 20000
@@ -325,13 +343,9 @@ def main():
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-    ])
-
-    train_dataset = datasets.CIFAR10('./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.CIFAR10('./data', train=False, download=True, transform=transform)
+    train_dataset = datasets.CIFAR10('./data', train=True, download=True)
+    test_dataset = datasets.CIFAR10('./data', train=False, download=True)
+    x_train_all, y_train_all = load_cifar_tensors(train_dataset, device)
 
     # GA進化用45,000枚の画像番号
     ga_train_indices = list(range(45000))
@@ -339,17 +353,16 @@ def main():
     ga_final_indices = list(range(45000, 50000))
 
     # 公式テスト画像は候補選択に使わない
-    x_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))]).to(device)
-    y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))]).to(device)
+    x_test, y_test = load_cifar_tensors(test_dataset, device)
 
     # GA前を評価
     origin_w = torch.cat([layer.weight.detach().cpu().reshape(-1) for layer in model.layers])
     origin_w = torch.where(origin_w >= 0, 1.0, -1.0)
-    before_acc, before_loss = evaluate(model, origin_w, x_test, y_test, device)
+    before_acc, before_loss = evaluate(model, origin_w, x_test, y_test, 500, device)
 
     # GA実行とGA後の評価
-    best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size, x_test, y_test)
-    after_acc, after_loss = evaluate(model, best_w, x_test, y_test, device)
+    best_w, history = genetic_algorithm(model, x_train_all, y_train_all, ga_train_indices, ga_final_indices, device, eval_size, x_test, y_test)
+    after_acc, after_loss = evaluate(model, best_w, x_test, y_test, 500, device)
 
     print(f"Test Accuracy: {before_acc * 100:.2f}% → {after_acc * 100:.2f}%")
     print(f"変化: {(after_acc - before_acc) * 100:+.2f}ポイント")
