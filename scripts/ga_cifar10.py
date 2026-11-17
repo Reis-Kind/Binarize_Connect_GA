@@ -1,11 +1,20 @@
 import os
 import csv
+import time
 import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 from binaryconnect_cifar10 import BinaryConnectCifar10
+
+
+def format_duration(seconds):
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
 
 def evaluate(model, w, x, y, eval_batch, device):
     """
@@ -127,7 +136,11 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
     y_final = y_all[final_idx_t]
     
     # 全個体を評価
+    ga_start = time.perf_counter()
     for gen in range(generations + 1):
+        if device.type == 'cuda':
+            torch.cuda.synchronize(device)
+        generation_start = time.perf_counter()
 
         order = torch.randperm(len(train_indices), generator=data_generator)[:eval_size].tolist()
             
@@ -230,6 +243,14 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
 
         # 
         if gen == generations:
+            if device.type == 'cuda':
+                torch.cuda.synchronize(device)
+            elapsed = time.perf_counter() - ga_start
+            print(
+                f"時間 | 世代: {format_duration(time.perf_counter() - generation_start)} | "
+                f"累計: {format_duration(elapsed)}",
+                flush=True
+            )
             break
 
         # 現在の集団を保存してから次世代を作る
@@ -274,6 +295,15 @@ def genetic_algorithm(model, x_all, y_all, train_indices, final_indices, device,
 
         # 新しい集団に更新
         population_w = next_population
+
+        if device.type == 'cuda':
+            torch.cuda.synchronize(device)
+        elapsed = time.perf_counter() - ga_start
+        print(
+            f"時間 | 世代: {format_duration(time.perf_counter() - generation_start)} | "
+            f"累計: {format_duration(elapsed)}",
+            flush=True
+        )
 
     # 元BPを最初の候補にする
     final_best_w = origin_w.clone()
@@ -362,8 +392,9 @@ def load_cifar_tensors(dataset, device):
 
 
 def main():
+    program_start = time.perf_counter()
 
-    eval_size = 20000
+    eval_size = 45000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
@@ -470,6 +501,10 @@ def main():
     plt.close()
 
     save_csv(history, after_acc, after_loss)
+
+    if device.type == 'cuda':
+        torch.cuda.synchronize(device)
+    print(f"全体の実行時間: {format_duration(time.perf_counter() - program_start)}", flush=True)
 
 if __name__ == '__main__':
     main()
