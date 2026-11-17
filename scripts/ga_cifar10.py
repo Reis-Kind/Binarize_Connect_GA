@@ -345,7 +345,7 @@ def save_csv(history, after_acc=None, after_loss=None):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_5000.csv')
+    csv_path = ('./output/ga_cifar_noaug_45000.csv')
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -495,7 +495,7 @@ def main():
     os.makedirs('./output', exist_ok=True)
 
     plt.savefig(
-        './output/ga_cifar_noaug_3conv_nobias_128_BPseed44_best_val_300ep_2000batch_0.0001_5000.png',
+        './output/ga_cifar_45000.png',
         dpi=300
     )
     plt.close()
