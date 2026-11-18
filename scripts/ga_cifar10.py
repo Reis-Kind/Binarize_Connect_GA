@@ -394,7 +394,7 @@ def load_cifar_tensors(dataset, device):
 def main():
     program_start = time.perf_counter()
 
-    eval_size = 35000
+    eval_size = 45000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
