@@ -16,6 +16,15 @@ def format_duration(seconds):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
+def load_cifar_tensors(dataset, device):
+    mean = torch.tensor((0.4914, 0.4822, 0.4465), device=device).view(1, 3, 1, 1)
+    std = torch.tensor((0.2023, 0.1994, 0.2010), device=device).view(1, 3, 1, 1)
+    x = torch.from_numpy(dataset.data).to(device).permute(0, 3, 1, 2).float().div(255.0)
+    x = ((x - mean) / std).half().contiguous()
+    y = torch.tensor(dataset.targets, device=device)
+    return x, y
+
+
 def evaluate(model, w, x, y, eval_batch, device):
     """
     個体の重みをmodel.layersへ設定し、正答率とLossを計算。
@@ -380,15 +389,6 @@ def save_csv(history, after_acc=None, after_loss=None):
                 'after_ga', '', '', '', '', '', '',
                 after_acc * 100, after_loss
             ])
-
-
-def load_cifar_tensors(dataset, device):
-    mean = torch.tensor((0.4914, 0.4822, 0.4465), device=device).view(1, 3, 1, 1)
-    std = torch.tensor((0.2023, 0.1994, 0.2010), device=device).view(1, 3, 1, 1)
-    x = torch.from_numpy(dataset.data).to(device).permute(0, 3, 1, 2).float().div(255.0)
-    x = ((x - mean) / std).half().contiguous()
-    y = torch.tensor(dataset.targets, device=device)
-    return x, y
 
 
 def main():

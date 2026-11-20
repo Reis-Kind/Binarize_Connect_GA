@@ -139,7 +139,7 @@ def train_evaluate(model, x, y):
     return acc, loss
 
 
-def plot(train_losses, train_accuracies, test_losses, test_accuracies):
+def plot(train_losses, train_accuracies, test_losses, test_accuracies, run_name):
     """
     Train/TestのLossとAccuracyをグラフ化する。
     """
@@ -191,7 +191,7 @@ def plot(train_losses, train_accuracies, test_losses, test_accuracies):
 
     os.makedirs('./output', exist_ok=True)
 
-    graph_path = ('./output/binaryconnect_cifar_noaug_nobias_3conv_128_seed44_300ep_best_val.png')
+    graph_path = os.path.join('./output', f'{run_name}.png')
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
@@ -206,15 +206,13 @@ def save_csv(
     best_epoch,
     best_val_accuracy,
     selected_acc,
-    selected_loss
+    selected_loss,
+    run_name
 ):
     """毎epochの履歴と最良モデルの結果を保存する．"""
     os.makedirs('./output', exist_ok=True)
 
-    csv_path = (
-        './output/binaryconnect_cifar_noaug_'
-        '3conv_nobias_128_seed44_300ep_best_val.csv'
-    )
+    csv_path = os.path.join('./output', f'{run_name}.csv')
 
     with open(
         csv_path, 'w', newline='', encoding='utf-8'
@@ -268,6 +266,7 @@ def save_csv(
 def main():
 
     random_seed = 44
+    run_name = f'BP_{random_seed}'
     epochs = 300
     batch_size = 64
     learning_rate = 0.001
@@ -326,7 +325,7 @@ def main():
     best_final_loss = float('inf')
     best_model = None
     best_epoch = 0
-    save_path = './output/binaryconnect_cifar_noaug_3conv_nobias_128_seed44_300ep_best_val.pt'
+    save_path = os.path.join('./output', f'{run_name}.pt')
 
     print("学習開始")
 
@@ -380,7 +379,7 @@ def main():
         f"Test Loss: {selected_loss:.4f}"
     )
 
-    plot(train_losses, train_accuracies, test_losses, test_accuracies)
+    plot(train_losses, train_accuracies, test_losses, test_accuracies, run_name)
     save_csv(
         train_losses,
         train_accuracies,
@@ -389,7 +388,8 @@ def main():
         best_epoch,
         best_final_accuracy,
         selected_acc,
-        selected_loss
+        selected_loss,
+        run_name
     )
 
 if __name__ == '__main__':

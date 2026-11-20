@@ -1,10 +1,23 @@
 import os
 import csv
+import time
 import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-from torchvision import datasets, transforms
+from torchvision import datasets
+
+
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+RUN_NAME = "ga_only_cifar_pop1000_eval20000"
+
+
+def format_duration(seconds):
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
 
 class GACifar10(nn.Module):
     def __init__(self):
@@ -50,13 +63,21 @@ class GACifar10(nn.Module):
 
         return x
 
+def load_cifar_tensors(dataset, device):
+    mean = torch.tensor((0.4914, 0.4822, 0.4465), device=device).view(1, 3, 1, 1)
+    std = torch.tensor((0.2023, 0.1994, 0.2010), device=device).view(1, 3, 1, 1)
+    x = torch.from_numpy(dataset.data).to(device).permute(0, 3, 1, 2).float().div(255.0)
+    x = ((x - mean) / std).half().contiguous()
+    y = torch.tensor(dataset.targets, device=device)
+    return x, y
 
-def evaluate(model, w, x, y, device):
+
+def evaluate(model, w, x, y, eval_batch, device):
     """
     個体の重みをmodel.layersへ設定し、正答率とLossを計算。
     正答率は0～1で返す。
     """
-
+    w = w.to(device)
     model.eval()
     with torch.no_grad():
         # 一次元のGA遺伝子をどこまで使ったか
@@ -72,11 +93,18 @@ def evaluate(model, w, x, y, device):
         if offset != w.numel():
             raise ValueError("モデルと遺伝子の重み数が一致しません。")
 
-        outputs = model(x)
+        loss_sum = torch.zeros((), device=device)
+        correct = torch.zeros((), device=device)
 
-        loss = nn.functional.cross_entropy(outputs, y).item()
+        for s in range(0, len(x), eval_batch):
+            xb, yb = x[s:s + eval_batch], y[s:s + eval_batch]
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                outputs = model(xb)
+                loss_sum += nn.functional.cross_entropy(outputs, yb, reduction='sum')
+                correct += (outputs.argmax(dim=1) == yb).sum()
 
-        acc = (outputs.argmax(dim=1) == y).float().mean().item()
+        loss = (loss_sum / len(x)).item()
+        acc = (correct / len(x)).item()
     
     return acc, loss
 
@@ -108,14 +136,16 @@ def tournament_select(scores, losses, k):
     return best_idx
 
 
-def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval_size, x_test, y_test):
+def genetic_algorithm(
+    model, x_train_all, y_train_all,
+    train_indices, final_indices, device, eval_size, x_test, y_test
+):
     """
     
     """
-    population = 500
-    generations = 10000
+    population = 1000
+    generations = 　10000
     elite_size = 50
-    mutation_rate = 0.0001
     random_seed = 42
 
     torch.manual_seed(random_seed)
@@ -133,12 +163,15 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     # 最良個体を元のパラメータで初期化
     best_w = 0
     history = []
-    # best_candidates = []
+    best_candidates = []
 
     # 全個体を評価
     for gen in range(generations + 1):
+        if device.type == 'cuda':
+            torch.cuda.synchronize(device)
+        generation_start = time.perf_counter()
 
-        # 45,000枚の中での位置を、重複なしで5000個選ぶ
+        # GA用データから重複なしで評価画像を選ぶ
         order = torch.randperm(
             len(train_indices),
             generator=data_generator
@@ -148,21 +181,41 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         indices = [train_indices[i] for i in order]
 
         # 今回の世代で使う画像とラベル
-        x_eval = torch.stack([dataset[i][0] for i in indices]).to(device)
-        y_eval = torch.tensor([dataset[i][1] for i in indices]).to(device)
+        sel = torch.tensor(indices, device=device)
+        x_eval = x_train_all[sel]
+        y_eval = y_train_all[sel]
+
+        x_eval_folds = torch.tensor_split(x_eval, 4, dim=0)
+        y_eval_folds = torch.tensor_split(y_eval, 4, dim=0)
 
         # 前の世代から持ち越した候補を、
         # 今回の画像で評価し直す
 
         scores = []
+        mean_accuracies = []
+        accuracy_stds = []
         losses = []
 
         for i in range(population):
-            acc, loss = evaluate(model, population_w[i], x_eval, y_eval, device)
-            scores.append(acc)
-            losses.append(loss)
+            fold_accs = []
+            fold_losses = []
 
-        # 正答率の降順、同率ならLossの昇順に並べる
+            for x_fold, y_fold in zip(x_eval_folds, y_eval_folds):
+                acc, loss = evaluate(model, population_w[i], x_fold, y_fold, 500, device)
+                fold_accs.append(acc)
+                fold_losses.append(loss)
+
+            mean_acc = float(np.mean(fold_accs))
+            accuracy_std = float(np.std(fold_accs))
+            mean_loss = float(np.mean(fold_losses))
+            robust_score = mean_acc - 0.5 * accuracy_std
+
+            scores.append(robust_score)
+            mean_accuracies.append(mean_acc)
+            accuracy_stds.append(accuracy_std)
+            losses.append(mean_loss)
+
+        # 安定性スコアの降順、同率なら平均Lossの昇順
         ranked_indices = sorted(
             range(population),
             key=lambda i: (scores[i], -losses[i]),
@@ -172,33 +225,44 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
         # この世代で最も良い個体
         best_idx = ranked_indices[0]
         best_w = population_w[best_idx].clone()
-        best_acc = scores[best_idx]
-        best_loss = losses[best_idx]
-        # best_candidates.append(best_w.clone())
 
-        test_acc, test_loss = evaluate(model, best_w, x_test, y_test, device)
+        best_candidates.append(best_w.clone())
+
+        best_acc = mean_accuracies[best_idx]
+        best_std = accuracy_stds[best_idx]
+        best_score = scores[best_idx]
+        best_loss = losses[best_idx]
+
+        test_acc, test_loss = evaluate(model, best_w, x_test, y_test, 500, device)
 
         history.append({
             'generation': gen,
             'accuracy': best_acc,
+            'accuracy_std': best_std,
+            'stability_score': best_score,
             'loss': best_loss,
             'test_accuracy': test_acc,
-            'test_loss': test_loss
+            'test_loss': test_loss,
         })
-
-        save_csv(history)
-
-        print(
-            f"世代 [{gen}/{generations}] | "
-            f"Train Acc: {best_acc * 100:.2f}% | "
-            f"Train Loss: {best_loss:.4f} | "
-            f"Test Acc: {test_acc * 100:.2f}% | "
-            f"Test Loss: {test_loss:.4f}",
-            flush=True
-        )
 
         # 
         if gen == generations:
+            if device.type == 'cuda':
+                torch.cuda.synchronize(device)
+            generation_seconds = time.perf_counter() - generation_start
+            history[-1]['generation_seconds'] = generation_seconds
+            save_csv(history)
+            print(
+                f"世代 [{gen}/{generations}] | "
+                f"Train Acc: {best_acc * 100:.2f}% | "
+                f"Fold SD: {best_std * 100:.3f}pt | "
+                f"Stability: {best_score * 100:.2f}% | "
+                f"Train Loss: {best_loss:.4f} | "
+                f"Test Acc: {test_acc * 100:.2f}% | "
+                f"Test Loss: {test_loss:.4f} | "
+                f"世代時間: {generation_seconds:.2f}秒",
+                flush=True
+            )
             break
 
         # 現在の集団を保存してから次世代を作る
@@ -225,48 +289,60 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
             child = torch.where(cross_mask, parent_population[parent1_idx], parent_population[parent2_idx])
 
             # 二値重みの符号を突然変異させる
-            mutation_mask = torch.rand(n_weight, device=device) < mutation_rate
-            child[mutation_mask] *= -1.0
+            n_children = population - elite_size
+            child_index = i - elite_size
 
+            if child_index < int(n_children * 0.7):
+                child_mutation_rate = 0.0001
+            elif child_index < int(n_children * 0.9):
+                child_mutation_rate = 0.001
+            else:
+                child_mutation_rate = 0.01
+
+            mutation_mask = torch.rand(n_weight, device=device) < child_mutation_rate
+            child[mutation_mask] *= -1.0
             next_population[i] = child
 
         # 新しい集団に更新
         population_w = next_population
 
+        if device.type == 'cuda':
+            torch.cuda.synchronize(device)
+        generation_seconds = time.perf_counter() - generation_start
+        history[-1]['generation_seconds'] = generation_seconds
+        save_csv(history)
+        print(
+            f"世代 [{gen}/{generations}] | "
+            f"Train Acc: {best_acc * 100:.2f}% | "
+            f"Fold SD: {best_std * 100:.3f}pt | "
+            f"Stability: {best_score * 100:.2f}% | "
+            f"Train Loss: {best_loss:.4f} | "
+            f"Test Acc: {test_acc * 100:.2f}% | "
+            f"Test Loss: {test_loss:.4f} | "
+            f"世代時間: {generation_seconds:.2f}秒",
+            flush=True
+        )
 
-    # 最良個体を反映し、二値化層も同期
+
     # GA終了後の個体選択に使う固定5,000枚
-    x_final = torch.stack([dataset[i][0] for i in final_indices]).to(device)
-    y_final = torch.tensor([dataset[i][1] for i in final_indices]).to(device)
+    final_sel = torch.tensor(final_indices, device=device)
+    x_final = x_train_all[final_sel]
+    y_final = y_train_all[final_sel]
 
-    # 元BPを最初の候補にする
-    final_best_w = 0
+    final_best_w = None
     final_best_acc = -1.0
     final_best_loss = float('inf')
 
-    # 最終世代の全個体を固定5,000枚で評価する
-    
-    # 最終世代の個体を固定5,000枚で評価する
-    # candidates = list(population_w) + best_candidates[:-1]
-    """for candidate_w in candidates:
-        acc, loss = evaluate(model, candidate_w, x_final, y_final, device)
+    # 最終世代の個体と各世代の最良個体を固定5,000枚で比較する
+    candidates = list(population_w) + best_candidates[:-1]
 
-        # 正答率が高い個体を選ぶ
-        # 同率の場合はLossが小さい個体を選ぶ
-        if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
+    for candidate_w in candidates:
+        acc, loss = evaluate(model, candidate_w, x_final, y_final, 500, device)
+
+        if acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss):
             final_best_acc = acc
             final_best_loss = loss
-            final_best_w = candidate_w.clone()"""
-    
-    for i in range(population):
-        acc, loss = evaluate(model, population_w[i], x_final, y_final, device)
- 
-        # 正答率が高い個体を選ぶ
-        # 同率の場合はLossが小さい個体を選ぶ
-        if (acc > final_best_acc or (acc == final_best_acc and loss < final_best_loss)):
-            final_best_acc = acc
-            final_best_loss = loss
-            final_best_w = population_w[i].clone()
+            final_best_w = candidate_w.clone()
 
     print("\n固定5000枚による最終選択")
     print(
@@ -275,7 +351,7 @@ def genetic_algorithm(model, dataset, train_indices, final_indices, device, eval
     )
 
     # 選択した個体をモデルに反映
-    evaluate(model, final_best_w, x_final, y_final, device)
+    evaluate(model, final_best_w, x_final, y_final, 500, device)
 
   
 
@@ -287,7 +363,8 @@ def save_csv(history, after_acc=None, after_loss=None):
     GA前後の公式テストAccuracyとLossをCSVに保存する。
     """
 
-    csv_path = ('./output/ga_only_cifar_3conv_128_500_newMutation_200batch_10000ep.csv')
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    csv_path = os.path.join(OUTPUT_DIR, f"{RUN_NAME}.csv")
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -296,16 +373,19 @@ def save_csv(history, after_acc=None, after_loss=None):
             'stage',
             'generation',
             'train_accuracy_percent',
+            'train_accuracy_std_percent',
+            'stability_score_percent',
             'train_loss',
             'test_accuracy_percent',
             'test_loss'
         ])
-
         for h in history:
             writer.writerow([
                 'generation',
                 h['generation'],
                 h['accuracy'] * 100,
+                h['accuracy_std'] * 100,
+                h['stability_score'] * 100,
                 h['loss'],
                 h['test_accuracy'] * 100,
                 h['test_loss'],
@@ -314,39 +394,37 @@ def save_csv(history, after_acc=None, after_loss=None):
         # 最終選択後のテスト結果
         if after_acc is not None and after_loss is not None:
             writer.writerow([
-                'after_ga', '', '', '', 
+                'after_ga', '', '', '', '', '',
                 after_acc * 100, after_loss
             ])
 
 
 def main():
+    program_start = time.perf_counter()
 
-    eval_size = 2000
+    eval_size = 20000
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用デバイス: {device}")
 
     model = GACifar10().to(device)
 
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-    ])
-
-    train_dataset = datasets.CIFAR10('./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.CIFAR10('./data', train=False, download=True, transform=transform)
+    train_dataset = datasets.CIFAR10('./data', train=True, download=True)
+    test_dataset = datasets.CIFAR10('./data', train=False, download=True)
+    x_train_all, y_train_all = load_cifar_tensors(train_dataset, device)
+    x_test, y_test = load_cifar_tensors(test_dataset, device)
 
    # GA進化用45,000枚の画像番号
     ga_train_indices = list(range(45000))
     # GA最終選択用5,000枚の画像番号
     ga_final_indices = list(range(45000, 50000))
 
-    x_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))]).to(device)
-    y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))]).to(device)
-
     # GA実行とGA後の評価
-    best_w, history = genetic_algorithm(model, train_dataset, ga_train_indices, ga_final_indices, device, eval_size, x_test, y_test)
-    after_acc, after_loss = evaluate(model, best_w, x_test, y_test, device)
+    best_w, history = genetic_algorithm(
+        model, x_train_all, y_train_all,
+        ga_train_indices, ga_final_indices, device, eval_size, x_test, y_test
+    )
+    after_acc, after_loss = evaluate(model, best_w, x_test, y_test, 500, device)
 
     print(f"Test Accuracy: {after_acc * 100:.2f}%")
 
@@ -396,14 +474,21 @@ def main():
 
     plt.tight_layout()
 
-    os.makedirs('./output', exist_ok=True)
-    graph_path = './output/ga_only_cifar_3conv_128_500_newMutation_200batch_10000ep.png'
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    graph_path = os.path.join(OUTPUT_DIR, f"{RUN_NAME}.png")
     plt.savefig(graph_path, dpi=300)
     plt.close()
 
     print(f"グラフを '{graph_path}' に保存しました。")
 
     save_csv(history, after_acc, after_loss)
+
+    if device.type == 'cuda':
+        torch.cuda.synchronize(device)
+    print(
+        f"全体の実行時間: {format_duration(time.perf_counter() - program_start)}",
+        flush=True
+    )
 
 if __name__ == '__main__':
     main()
