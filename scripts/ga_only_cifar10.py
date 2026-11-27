@@ -144,7 +144,7 @@ def genetic_algorithm(
     
     """
     population = 1000
-    generations = 　10000
+    generations = 10000
     elite_size = 50
     random_seed = 42
 
@@ -277,12 +277,12 @@ def genetic_algorithm(
 
         # 交叉と突然変異
         for i in range(elite_size, population):
-            parent1_idx = tournament_select(scores, losses, 3)
-            parent2_idx = tournament_select(scores, losses, 3)
+            parent1_idx = tournament_select(scores, losses, 6)
+            parent2_idx = tournament_select(scores, losses, 6)
 
             # 同じ個体同士の交叉を避ける
             while parent2_idx == parent1_idx:
-                parent2_idx = tournament_select(scores, losses, 3)
+                parent2_idx = tournament_select(scores, losses, 6)
 
             # 2個体による一様交叉
             cross_mask = torch.rand(n_weight, device=device) < 0.5

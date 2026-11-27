@@ -265,7 +265,7 @@ def save_csv(
 
 def main():
 
-    random_seed = 44
+    random_seed = 45
     run_name = f'BP_{random_seed}'
     epochs = 300
     batch_size = 64
